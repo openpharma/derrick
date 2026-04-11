@@ -3,4 +3,6 @@
 export(hello)
 export(plumber_api)
 export(shiny_app)
+import(crane)
+import(rlang)
 importFrom(utils,packageName)
