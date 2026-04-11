@@ -1,0 +1,165 @@
+---
+name: Grammar 📓
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    branches:
+      - main
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      passive-voice:
+        description: Enable checks for passive voice
+        required: false
+        default: false
+        type: boolean
+      enable-annotations:
+        description: Enable creation of GitHub annotations
+        required: false
+        default: false
+        type: boolean
+concurrency:
+  group: grammar-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  grammar:
+    name: Check 📝
+    runs-on: ubuntu-latest
+    if: >
+      !contains(github.event.commits[0].message, '[skip grammar]')
+        && github.event.pull_request.draft == false
+
+    steps:
+      - name: Get branch names 🌿
+        id: branch-name
+        uses: tj-actions/branch-names@e497ceb8ccd43fd9573cf2e375216625bc411d1f # v9.0.0
+
+      - name: Checkout repo (PR) 🛎
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        if: github.event_name == 'pull_request'
+        with:
+          ref: ${{ steps.branch-name.outputs.head_ref_branch }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+
+      - name: Checkout repo 🛎
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        if: github.event_name != 'pull_request'
+        with:
+          ref: ${{ steps.branch-name.outputs.current_branch }}
+
+      - name: Check commit message 💬
+        run: |
+          git config --global --add safe.directory $(pwd)
+          export head_commit_message="$(git show -s --format=%B | tr '\r\n' ' ' | tr '\n' ' ')"
+          echo "head_commit_message = $head_commit_message"
+          if [[ $head_commit_message == *"$SKIP_INSTRUCTION"* ]]; then
+            echo "Skip instruction detected - cancelling the workflow."
+            exit 1
+          fi
+        shell: bash
+        env:
+          SKIP_INSTRUCTION: "[skip grammar]"
+
+      - name: Restore npm cache 💰
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          key: npm-${{ runner.os }}-${{ github.job }}
+          restore-keys: |
+            npm-${{ runner.os }}-
+          path: node_modules
+
+      - name: Setup NodeJS ☊
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        id: npm-cache
+        with:
+          node-version: 20
+
+      - name: Install write-good and deps ⏬
+        if: steps.npm-cache.outputs.cache-hit != 'true'
+        run: npm install write-good fs
+        shell: bash
+
+      - name: Get changed files 🗞
+        id: changed-files
+        # v45.0.8
+        uses: tj-actions/changed-files@a284dc1814e3fd07f2e34267fc8f81227ed29fb8
+        with:
+          separator: ","
+          files: |
+            **.R
+            **.Rmd
+            **.Rnw
+            **.Rmarkdown
+            **.qmd
+            **.md
+
+      - name: Run write-good 🏃‍♀️
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const writeGood = require('write-good');
+            const path = require('path');
+            const fs = require('fs');
+            const changedFiles = "${{ steps.changed-files.outputs.all_changed_files }}";
+            if (!changedFiles || changedFiles.length === 0) {
+              process.exit(0);
+            }
+            let files = changedFiles.split(",");
+            let allSuggestions = [];
+            var inputs = ${{ toJSON(inputs) }};
+            var passiveVoice = inputs['passive-voice'];
+            if (typeof passiveVoice === 'undefined') {
+              passiveVoice = false;
+            }
+            files.forEach((file) => {
+              if (fs.lstatSync(file).isFile() &&
+                  !path.dirname(file).startsWith("node_modules")) {
+                const contents = fs.readFileSync(file, 'utf8');
+                const suggestions = writeGood(contents, { passive : passiveVoice });
+                const annotations = writeGood.annotate(contents, suggestions, true);
+                if (annotations.length) {
+                  for (var i=0; i < annotations.length; i++) {
+                    let ann = annotations[i];
+                    ann['message'] = ann['reason'];
+                    ann['start_column'] = ann['col'];
+                    ann['end_column'] = ann['col'];
+                    ann['start_line'] = ann['line'];
+                    ann['end_line'] = ann['line'];
+                    ann['annotation_level'] = 'notice';
+                    ann['path'] = file;
+                    delete ann['reason'];
+                    delete ann['col'];
+                    delete ann['line'];
+                    allSuggestions.push(ann);
+                  }
+                }
+              }
+            });
+            fs.writeFileSync('./annotations.json', JSON.stringify(allSuggestions, null, 2) , 'utf-8');
+
+      - name: Check whether annotations exist 💭
+        id: check-annotations
+        if: inputs.enable-annotations
+        uses: andstor/file-existence-action@076e0072799f4942c8bc574a82233e1e4d13e9d6 # v3
+        with:
+          files: "annotations.json"
+
+      - name: Annotate files for grammar suggestions ✍️
+        if: >
+          steps.check-annotations.outputs.files_exists == 'true'
+            && inputs.enable-annotations
+        uses: kibalabs/github-action-create-annotations@e48f3e1df0c67dd0438ece4a63165459eab7ac60 # v0.2.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          json-file-path: ./annotations.json
+          fail-on-error: false

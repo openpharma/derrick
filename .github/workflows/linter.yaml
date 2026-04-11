@@ -1,0 +1,179 @@
+---
+name: SuperLinter 🦸‍♀️
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    branches:
+      - main
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      lintr_error_on_lint:
+        description: Produce an error when lints are found
+        required: false
+        type: boolean
+        default: true
+      lint-all-files:
+        description: Lint all files every time
+        default: false
+        required: false
+        type: boolean
+
+concurrency:
+  group: lint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: SuperLinter 🦸‍♂️
+    runs-on: ubuntu-latest
+    if: >
+      !contains(github.event.commits[0].message, '[skip linter]')
+        && github.event.pull_request.draft == false
+
+    steps:
+      - name: Get branch names 🌿
+        id: branch-name
+        uses: tj-actions/branch-names@e497ceb8ccd43fd9573cf2e375216625bc411d1f # v9.0.0
+
+      - name: Checkout repo (PR) 🛎
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        if: github.event_name == 'pull_request'
+        with:
+          ref: ${{ steps.branch-name.outputs.head_ref_branch }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 0
+
+      - name: Checkout repo 🛎
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        if: github.event_name != 'pull_request'
+        with:
+          ref: ${{ steps.branch-name.outputs.current_branch }}
+          fetch-depth: 0
+
+      - name: Check commit message 💬
+        run: |
+          git config --global --add safe.directory $(pwd)
+          export head_commit_message="$(git show -s --format=%B | tr '\r\n' ' ' | tr '\n' ' ')"
+          echo "head_commit_message = $head_commit_message"
+          if [[ $head_commit_message == *"$SKIP_INSTRUCTION"* ]]; then
+            echo "Skip instruction detected - cancelling the workflow."
+            exit 1
+          fi
+        shell: bash
+        env:
+          SKIP_INSTRUCTION: "[skip linter]"
+
+      - name: Override SuperLinter configs 💾
+        run: |
+          # Override markdownlint default config
+          [ ! -e .markdownlint.yaml ] && cat > .markdownlint.yaml <<EOF
+          ###############
+          # Rules by id #
+          ###############
+          MD004: false                  # Unordered list style
+          MD007:
+            indent: 2                   # Unordered list indentation
+          MD013:
+            line_length: 800            # Line length
+          MD026:
+            punctuation: ".,;:!。，；:"  # List of not allowed
+          MD029: false                  # Ordered list item prefix
+          MD033: false                  # Allow inline HTML
+          MD036: false                  # Emphasis used instead of a heading
+          #################
+          # Rules by tags #
+          #################
+          blank_lines: true  # Error on blank lines
+          EOF
+        shell: bash
+
+      - name: Lint Code Base 🧶
+        uses: super-linter/super-linter/slim@a8150b40c89574adb5f68bf9502b890a236a06b3 # v5
+        env:
+          LINTER_RULES_PATH: /
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          FILTER_REGEX_EXCLUDE: NEWS.md|design/.*|testthat/_snaps/.*
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VALIDATE_ALL_CODEBASE: false
+          VALIDATE_BASH: true
+          VALIDATE_DOCKERFILE: true
+          VALIDATE_MARKDOWN: true
+          MARKDOWN_CONFIG_FILE: .markdownlint.yaml
+          VALIDATE_YAML: true
+
+  lint-r-code:
+    name: Lint R code 🧶
+    runs-on: ubuntu-latest
+    if: >
+      !contains(github.event.commits[0].message, '[skip linter]')
+        && github.event.pull_request.draft == false
+    container:
+      image: ghcr.io/insightsengineering/rstudio:latest
+
+    steps:
+      - name: Checkout repo (PR) 🛎
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        if: github.event_name == 'pull_request'
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Checkout repo 🛎
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        if: github.event_name != 'pull_request'
+        with:
+          fetch-depth: 0
+
+      - name: Check commit message 💬
+        run: |
+          git config --global --add safe.directory $(pwd)
+          export head_commit_message="$(git show -s --format=%B | tr '\r\n' ' ' | tr '\n' ' ')"
+          echo "head_commit_message = $head_commit_message"
+          if [[ $head_commit_message == *"$SKIP_INSTRUCTION"* ]]; then
+            echo "Skip instruction detected - cancelling the workflow."
+            exit 1
+          fi
+        shell: bash
+        env:
+          SKIP_INSTRUCTION: "[skip linter]"
+
+      - name: Changed files 🖋️
+        if: github.event_name != 'workflow_dispatch'
+        id: files
+        uses: Ana06/get-changed-files@e0c398b7065a8d84700c471b6afc4116d1ba4e96 # v2.2.0
+        with:
+          format: 'json'
+          filter: '*'
+
+      - name: Lint 🧶
+        run: |
+          github_event_name <- "${{ github.event_name }}"
+          cat(paste0("GitHub event name = ", github_event_name, "\n"))
+          exclusions_list <- NULL
+          if (!(identical("${{ inputs.lint-all-files }}", "true") || identical(github_event_name, "workflow_dispatch"))) {
+            changed_files <- jsonlite::fromJSON('${{ steps.files.outputs.added_modified }}')
+            all_files <- list.files(recursive = TRUE)
+            exclusions_list <- as.list(setdiff(all_files, changed_files))
+            cat("Linting only changed files:\n")
+            cat(changed_files)
+            cat("\n\n")
+          } else {
+            cat("Linting all files.\n")
+          }
+          lints <- lintr::lint_package(exclusions = exclusions_list)
+          if (length(lints) > 0L) {
+            print(lints)
+            if (identical("${{ inputs.lintr_error_on_lint }}", "true")) {
+              stop("Lints detected. Please review and adjust code according to the comments provided.", call. = FALSE)
+            }
+          }
+        shell: Rscript {0}

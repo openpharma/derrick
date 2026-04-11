@@ -1,0 +1,233 @@
+---
+name: Roxygen 🅾
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    branches:
+      - main
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      install-system-dependencies:
+        description: Check for and install system dependencies
+        required: false
+        default: false
+        type: boolean
+      enable-staged-dependencies-check:
+        description: Enable staged dependencies YAML check
+        required: false
+        default: false
+        type: boolean
+      auto-update:
+        description: If man pages are not up-to-date, they will be automatically updated and committed back to the branch.
+        required: false
+        default: false
+        type: boolean
+      sd-direction:
+        description: The direction to use to install staged dependencies. Choose between 'upstream', 'downstream' and 'all'
+        required: false
+        type: string
+        default: upstream
+      package-subdirectory:
+        description: Subdirectory in the repository, where the R package is located.
+        required: false
+        type: string
+        default: "."
+      deps-installation-method:
+        description: |
+          Which method for installing R package dependencies to use? Supported values are:
+          staged-dependencies
+          setup-r-dependencies
+        required: false
+        type: string
+        default: staged-dependencies
+      lookup-refs:
+        description: |
+          Passed to insightsengineering/setup-r-dependencies. See its documentation.
+          Used only if deps-installation-method == 'setup-r-dependencies'.
+        required: false
+        type: string
+        default: ""
+    secrets:
+      GITHUB_TOKEN:
+        description: |
+          Github token with read access to repositories, required for staged.dependencies installation
+        required: false
+
+concurrency:
+  group: roxygen-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  roxygen:
+    name: Manual pages check 🏁
+    runs-on: ubuntu-latest
+    if: >
+      !contains(github.event.commits[0].message, '[skip roxygen]')
+        && github.event.pull_request.draft == false
+    container:
+      image: ghcr.io/insightsengineering/rstudio:latest
+
+    steps:
+      - name: Setup token 🔑
+        id: github-token
+        run: |
+          if [ "${{ secrets.GITHUB_TOKEN }}" == "" ]; then
+            echo "GITHUB_TOKEN is empty. Substituting it with GITHUB_TOKEN."
+            echo "token=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_OUTPUT
+          else
+            echo "Using GITHUB_TOKEN."
+            echo "token=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Get branch names 🌿
+        id: branch-name
+        uses: tj-actions/branch-names@e497ceb8ccd43fd9573cf2e375216625bc411d1f # v9.0.0
+
+      - name: Checkout repo (PR) 🛎
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        if: github.event_name == 'pull_request'
+        with:
+          ref: ${{ steps.branch-name.outputs.head_ref_branch }}
+          path: ${{ github.event.repository.name }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          token: ${{ steps.github-token.outputs.token }}
+
+      - name: Checkout repo 🛎
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        if: github.event_name != 'pull_request'
+        with:
+          ref: ${{ steps.branch-name.outputs.current_branch }}
+          path: ${{ github.event.repository.name }}
+
+      - name: Check commit message 💬
+        run: |
+          git config --global --add safe.directory $(pwd)
+          export head_commit_message="$(git show -s --format=%B | tr '\r\n' ' ' | tr '\n' ' ')"
+          echo "head_commit_message = $head_commit_message"
+          if [[ $head_commit_message == *"$SKIP_INSTRUCTION"* ]]; then
+            echo "Skip instruction detected - cancelling the workflow."
+            exit 1
+          fi
+        shell: bash
+        working-directory: ${{ github.event.repository.name }}
+        env:
+          SKIP_INSTRUCTION: "[skip roxygen]"
+
+      - name: Normalize variables 📏
+        run: |
+          deps_installation_method="${{ inputs.deps-installation-method }}"
+          echo "deps_installation_method=${deps_installation_method:-staged-dependencies}" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Restore SD cache 💰
+        if: >-
+          env.deps_installation_method == 'staged-dependencies'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          key: sd-${{ runner.os }}-${{ github.event.repository.name }}
+          path: ~/.staged.dependencies
+
+      - name: Run Staged dependencies 🎦
+        if: >-
+          env.deps_installation_method == 'staged-dependencies'
+        uses: insightsengineering/staged-dependencies-action@v2
+        env:
+          GITHUB_PAT: ${{ steps.github-token.outputs.token }}
+        with:
+          path: ${{ github.event.repository.name }}/${{ inputs.package-subdirectory }}
+          enable-check: ${{ inputs.enable-staged-dependencies-check }}
+          run-system-dependencies: ${{ inputs.install-system-dependencies }}
+          direction: ${{ inputs.sd-direction }}
+
+      - name: Setup R dependencies 🎦
+        if: >-
+          env.deps_installation_method == 'setup-r-dependencies'
+        uses: insightsengineering/setup-r-dependencies@v1
+        env:
+          GITHUB_PAT: ${{ steps.github-token.outputs.token }}
+        with:
+          lookup-refs: ${{ inputs.lookup-refs }}
+          repository-path: ${{ github.event.repository.name }}/${{ inputs.package-subdirectory }}
+
+      - name: Generate man pages 📄
+        run: |
+          logfile <- "roxygen_${{ github.event.repository.name }}.log"
+          con <- file(logfile)
+          sink(con, append = TRUE, split = TRUE)
+          sink(con, append = TRUE, type = "message")
+          roxygen2::roxygenize('.')
+          sink()
+          sink(type = "message")
+          logs <- readLines(logfile)
+          cat("🪵 Log output of 'roxygen2::roxygenize()':\n")
+          system2("cat", logfile)
+          error_marker <- grep("Error:", logs)
+          warnings_marker <- grep("Warning message", logs)
+          if (length(warnings_marker) > 0) {
+            cat("⚠ One or more warnings were generated during the roxygen build:\n")
+            cat(logs[warnings_marker[[1]]:length(logs)], sep = "\n")
+            stop("Please 🙏 fix the warnings shown below this message 👇")
+          }
+          if (length(error_marker) > 0) {
+            cat("☠ One or more errors were generated during the roxygen build:\n")
+            cat(logs[error_marker[[1]]:length(logs)], sep = "\n")
+            stop("Please 🙏 fix the errors shown below this message 👇")
+          }
+        shell: Rscript {0}
+        working-directory: ${{ github.event.repository.name }}/${{ inputs.package-subdirectory }}
+        env:
+          LANG: en_US.UTF-8
+
+      - name: Roxygen check 🅾
+        run: |
+          AUTO_UPDATE=${{ inputs.auto-update }}
+          if [[ -n `git status -s | grep -E "man|DESCRIPTION"` ]]
+          then {
+            ROXYGEN_VERSION="$(Rscript -e 'packageVersion("roxygen2")' | awk '{print $NF}')"
+            echo "🙈 Manuals are not up-to-date with roxygen comments!"
+            echo "🔀 The following differences were noted:"
+            git diff man/* DESCRIPTION
+            # Attempt to commit and push man-page updates
+            if [ "${AUTO_UPDATE}" == "true" ]
+            then {
+              echo "Regenerating man pages via auto-update"
+              git config --global user.name "github-actions"
+              git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git config pull.rebase false
+              BRANCH_NAME="${{ steps.branch-name.outputs.head_ref_branch }}"
+              git pull origin ${BRANCH_NAME} || true
+              git add -A man/ DESCRIPTION
+              git commit -m "[skip roxygen] [skip vbump] Roxygen Man Pages Auto Update"
+              git push -v origin HEAD:${BRANCH_NAME} || \
+                (echo "⚠️ Could not push to ${BRANCH_NAME} on $(git remote -v show -n origin | grep Push)" && \
+                AUTO_UPDATE=failed)
+            }
+            fi
+            # If auto-update is disabled or is unsuccessful, let 'em know to fix manually
+            if [ "${AUTO_UPDATE}" != "true" ]
+            then {
+              echo -e "\n💻 Please rerun the following command on your workstation and push your changes"
+              echo "--------------------------------------------------------------------"
+              echo "roxygen2::roxygenize('.')"
+              echo "--------------------------------------------------------------------"
+              echo "ℹ roxygen2 version that was used in this workflow: $ROXYGEN_VERSION"
+              echo "🙏 Please ensure that the 'RoxygenNote' field in the DESCRIPTION file matches this version"
+              exit 1
+            }
+            fi
+          } else {
+            echo "💚 Manuals are up-to-date with roxygen comments"
+          }
+          fi
+        shell: bash
+        working-directory: ${{ github.event.repository.name }}/${{ inputs.package-subdirectory }}

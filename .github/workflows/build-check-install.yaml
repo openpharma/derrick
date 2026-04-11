@@ -1,0 +1,1099 @@
+---
+name: R CMD Check 🧬
+
+on:
+  push:
+    tags:
+      - "v*"
+    branches:
+      - main
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    branches:
+      - main
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      GITHUB_TOKEN:
+        description: |
+          Github token with read access to repositories, required for staged.dependencies installation
+        required: false
+    inputs:
+      install-system-dependencies:
+        description: Check for and install system dependencies
+        required: false
+        default: false
+        type: boolean
+      enable-staged-dependencies-check:
+        description: Enable staged dependencies YAML check
+        required: false
+        default: false
+        type: boolean
+      R_CHECK_FORCE_SUGGESTS:
+        description: If true, give an error if suggested packages are not available
+        required: false
+        default: true
+        type: boolean
+      skip-r-cmd-check:
+        description: Skip the R CMD check step in this workflow
+        required: false
+        default: false
+        type: boolean
+      skip-r-cmd-install:
+        description: Skip the R CMD INSTALL step in this workflow
+        required: false
+        default: true
+        type: boolean
+      enforce-note-blocklist:
+        description: Whether to check for specific NOTEs via regexes that should cause the pipeline to fail
+        required: false
+        default: false
+        type: boolean
+      note-blocklist:
+        description: |
+          List of regular expressions appearing in NOTEs that should cause the pipeline to fail.
+          Example usage:
+          note-blocklist: |
+            checking package dependencies ... NOTE( )+Depends: includes the non-default packages
+            checking R code for possible problems ... NOTE( )+.*: no visible global function definition for
+            checking for unstated dependencies in vignettes ... NOTE( )+\'.*\' import not declared from
+            checking dependencies in R code ... NOTE( )+Namespace in Imports field not imported from
+            checking installed package size ... NOTE( )+installed size is
+            checking files in ‘vignettes’ ... NOTE( )+VignetteBuilder field missing
+        required: false
+        default: ""
+        type: string
+      additional-r-cmd-build-params:
+        description: Additional flags or parameters to add to R CMD build
+        required: false
+        default: ""
+        type: string
+      additional-r-cmd-check-params:
+        description: Additional flags or parameters to add to R CMD check
+        required: false
+        default: ""
+        type: string
+      disable-unit-test-reports:
+        description: Do not produce unit test reports
+        required: false
+        default: false
+        type: boolean
+      additional-env-vars:
+        description: |
+          Extra environment variables, as a 'key=value' pair, with each pair on a new line.
+          Example usage:
+          additional-env-vars: |
+            ABC=123
+            XYZ=456
+        required: false
+        default: ""
+        type: string
+      junit-xml-storage:
+        description: Branch name to store JUnit XML reports
+        required: false
+        default: "_junit_xml_reports"
+        type: string
+      junit-xml-diff-branch:
+        description: Against which branch should the JUnit XML report from the current branch be compared?
+        required: false
+        default: main
+        type: string
+      junit-xml-comparison:
+        description: Turn on JUnit XML comparison
+        required: false
+        default: true
+        type: boolean
+      junit-xml-negative-threshold:
+        description: |
+          If time difference during JUnit XML comparison is between negative-threshold and 0: it's treated as 0.
+          This means that if test suite/case executes up to negative-threshold seconds faster,
+          this time difference is ignored as insignificant, and test suite/case is not shown in the table
+        required: false
+        default: 1.0
+        type: string
+      junit-xml-positive-threshold:
+        description: |
+          If time difference during JUnit XML comparison is between 0 and positive-threshold: it's treated as 0.
+          This means that if test suite/case executes up to positive-threshold seconds slower,
+          this time difference is ignored as insignificant, and test suite/case is not shown in the table
+        required: false
+        default: 1.0
+        type: string
+      sd-direction:
+        description: The direction to use to install staged dependencies. Choose between 'upstream', 'downstream' and 'all'
+        required: false
+        type: string
+        default: upstream
+      install-deps-from-package-repositories:
+        description: |
+          Set this to a comma-separated named list of R packages repositories to use for installing dependencies.
+          Example: "R-universe=https://insightsengineering.r-universe.dev/,CRAN=https://cloud.r-project.org/"
+          If the value is non-empty, it takes precedence over deps-installation-method.
+        required: false
+        type: string
+        default: ""
+      deps-installation-method:
+        description: |
+          Which method for installing R package dependencies to use? Supported values are:
+          staged-dependencies
+          setup-r-dependencies
+        required: false
+        type: string
+        default: staged-dependencies
+      lookup-refs:
+        description: |
+          List of package references to be used by setup-r-dependencies action if deps-installation-method == 'setup-r-dependencies'.
+        required: false
+        type: string
+        default: ""
+      skip-desc-branch:
+        description: |
+          Passed to `insightsengineering/setup-r-dependencies`.
+          Used only if deps-installation-method == 'setup-r-dependencies'.
+        required: false
+        type: boolean
+        default: false
+      skip-desc-dev:
+        description: |
+          Passed to `insightsengineering/setup-r-dependencies`.
+          Used only if deps-installation-method == 'setup-r-dependencies'.
+        required: false
+        type: boolean
+        default: false
+      repository-list:
+        description: |
+          Passed to `insightsengineering/setup-r-dependencies`.
+          Used only if deps-installation-method == 'setup-r-dependencies'.
+        required: false
+        type: string
+        default: "PPM=PPM@latest"
+      cache-version:
+        description: |
+          Passed to `insightsengineering/setup-r-dependencies`.
+          Used only if deps-installation-method == 'setup-r-dependencies'.
+        required: false
+        type: string
+        default: "1"
+      unit-test-report-brand:
+        description: Image URL to use in unit test report for branding. If empty, the default xunit-viewer brand will be used.
+        required: false
+        type: string
+        default: ""
+      publish-unit-test-report-gh-pages:
+        description: Publish HTML unit test report to GitHub Pages alongside pkgdown docs.
+        required: false
+        type: boolean
+        default: true
+      latest-tag-alt-name:
+        description: |
+          The name of directory to store unit test report when running for latest tag.
+          The variable is named this way to keep it consistent with r-pkgdown-multiversion input name.
+        required: false
+        type: string
+        default: "latest-tag"
+      release-candidate-alt-name:
+        description: |
+          The name of directory to store unit test report when running for rc tag.
+          The variable is named this way to keep it consistent with r-pkgdown-multiversion input name.
+        required: false
+        type: string
+        default: "release-candidate"
+      package-subdirectory:
+        description: Subdirectory in the repository, where the R package is located.
+        required: false
+        type: string
+        default: ""
+      additional-caches:
+        description: |
+          Additional cache directories. One cache path per new line.
+          Example usage:
+          additional-caches: |
+            ~/awesome-cache
+            /tmp/some-cache
+        required: false
+        type: string
+        default: ""
+      concurrency-group:
+        description: |
+          Concurrency group name in case a calling workflow would like to use multiple instances of this workflow simultaneously.
+        required: false
+        type: string
+        default: ""
+      enable-sd:
+        description: |
+          Whether the installation of package dependencies via staged.dependencies should be enabled.
+          Has no effect if deps-installation-method == 'setup-r-dependencies' or
+          install-deps-from-package-repositories is set to non-empty value.
+        required: false
+        type: boolean
+        default: true
+      update-r-packages:
+        description: |
+          Whether R packages installed in the container should be updated to their latest version from CRAN/BioC.
+        required: false
+        type: boolean
+        default: false
+      unit-test-report-directory:
+        description: |
+          Directory name on gh-pages branch where the unit test report will be uploaded.
+          If the unit test report directory is different than the default 'unit-test-report',
+          it has to be added to the additional-unit-test-report-directories pkgdown workflow input.
+          Additionally, if the non-default unit test report should be shown in the GitHub Pages
+          documentation drop-down, it has to be added to _pkgdown.yaml.
+        required: false
+        type: string
+        default: "unit-test-report"
+      disable-package-rebuild-and-upload:
+        description: This will disable the package rebuild and upload step for versioned tags.
+        required: false
+        type: boolean
+        default: false
+      selected-shinytests:
+        description: |
+          Should shinytests2 tests only run per modified corresponding R file in R/ folder?
+          If enabled and there is a module modificated only that shinytest2 file will be tested.
+          Might not apply to most packages! Because it replaces skip_if_too_deep(5) to skip_if_too_deep(3).
+          Will be ignored if the commit message contains [run-all-tests].
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: r-cmd-${{ inputs.concurrency-group }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-install-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - image: ghcr.io/insightsengineering/rstudio
+            tag: latest
+    name: ${{ matrix.config.image }}, version ${{ matrix.config.tag }}
+    runs-on: ubuntu-latest
+    if: >
+      !contains(github.event.commits[0].message, '[skip r-cmd]')
+        && github.event.pull_request.draft == false
+    container:
+      image: ${{ matrix.config.image }}:${{ matrix.config.tag }}
+    outputs:
+      publish-unit-test-html-report: ${{ steps.junit-output.outputs.junit-upload }}
+      current-branch-or-tag: ${{ steps.current-branch-or-tag.outputs.ref-name }}
+      is-latest-tag: ${{ steps.current-branch-or-tag.outputs.is-latest-tag }}
+      is-rc-tag: ${{ steps.current-branch-or-tag.outputs.is-rc-tag }}
+      multiversion-docs: ${{ steps.current-branch-or-tag.outputs.multiversion-docs }}
+
+    steps:
+      - name: Setup token 🔑
+        id: github-token
+        run: |
+          if [ "${{ secrets.GITHUB_TOKEN }}" == "" ]; then
+            echo "GITHUB_TOKEN is empty. Substituting it with GITHUB_TOKEN."
+            echo "token=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_OUTPUT
+          else
+            echo "Using GITHUB_TOKEN."
+            echo "token=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Get branch names 🌿
+        id: branch-name
+        uses: tj-actions/branch-names@e497ceb8ccd43fd9573cf2e375216625bc411d1f # v9.0.0
+
+      - name: Checkout repo (PR) 🛎
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        if: github.event_name == 'pull_request'
+        with:
+          ref: ${{ steps.branch-name.outputs.head_ref_branch }}
+          path: ${{ github.event.repository.name }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 0
+
+      - name: Checkout repo 🛎
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        if: github.event_name != 'pull_request'
+        with:
+          ref: ${{ steps.branch-name.outputs.current_branch }}
+          path: ${{ github.event.repository.name }}
+
+      - name: Check commit message 💬
+        run: |
+          git config --global --add safe.directory $(pwd)
+          export head_commit_message="$(git show -s --format=%B | tr '\r\n' ' ' | tr '\n' ' ')"
+          echo "head_commit_message = $head_commit_message"
+          if [[ $head_commit_message == *"$SKIP_INSTRUCTION"* ]]; then
+            echo "Skip instruction detected - cancelling the workflow."
+            exit 1
+          fi
+        shell: bash
+        working-directory: ${{ github.event.repository.name }}
+        env:
+          SKIP_INSTRUCTION: "[skip r-cmd]"
+
+      - name: Checkout gh-pages 🛎
+        if: >-
+          inputs.publish-unit-test-report-gh-pages == true
+            && github.event_name != 'pull_request'
+        id: checkout-gh-pages
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          ref: gh-pages
+          path: gh-pages
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+        continue-on-error: true
+
+      - name: Get current branch or tag 🏷️
+        if: >-
+          inputs.publish-unit-test-report-gh-pages == true
+            && github.event_name != 'pull_request'
+        id: current-branch-or-tag
+        run: |
+          if [ "${{ steps.branch-name.outputs.is_tag }}" == "true" ]; then
+            echo "Current tag: ${{ steps.branch-name.outputs.tag }}"
+            echo "ref-name=${{ steps.branch-name.outputs.tag }}" >> $GITHUB_OUTPUT
+            current_tag="${{ steps.branch-name.outputs.tag }}"
+            if [ "$(echo "$current_tag" | grep -E "^v([0-9]+\.)?([0-9]+\.)?([0-9]+)$")" != "" ]; then
+              echo "Running for latest-tag."
+              echo "is-latest-tag=true" >> $GITHUB_OUTPUT
+            elif [ "$(echo "$current_tag" | grep -E "^v([0-9]+\.)?([0-9]+\.)?([0-9]+)(-rc[0-9]+)$")" != "" ]; then
+              echo "Running for rc-tag."
+              echo "is-rc-tag=true" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "Current branch: ${{ steps.branch-name.outputs.current_branch }}"
+            echo "ref-name=${{ steps.branch-name.outputs.current_branch }}" >> $GITHUB_OUTPUT
+          fi
+          # Check if pkgdown multiversion docs are used at all.
+          if [ $(grep -rl '<!-- Generated by pkgdown + https://github.com/insightsengineering/r-pkgdown-multiversion -->' gh-pages | wc -l) -gt 0 ]; then
+            echo "multiversion-docs=true" >> $GITHUB_OUTPUT
+          else
+            echo "multiversion-docs=false" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Normalize variables 📏
+        run: |
+          junit_xml_storage_input="${{ inputs.junit-xml-storage }}"
+          junit_xml_diff_branch_input="${{ inputs.junit-xml-diff-branch }}"
+          junit_xml_comparison_input="${{ inputs.junit-xml-comparison }}"
+          junit_xml_positive_threshold="${{ inputs.junit-xml-positive-threshold }}"
+          junit_xml_negative_threshold="${{ inputs.junit-xml-negative-threshold }}"
+          enable_sd="${{ inputs.enable-sd }}"
+          deps_installation_method="${{ inputs.deps-installation-method }}"
+          echo "junit_xml_storage=${junit_xml_storage_input:-_junit_xml_reports}" >> $GITHUB_ENV
+          echo "junit_xml_diff_branch=${junit_xml_diff_branch_input:-main}" >> $GITHUB_ENV
+          echo "junit_xml_comparison=${junit_xml_comparison_input:-true}" >> $GITHUB_ENV
+          echo "junit_xml_positive_threshold=${junit_xml_positive_threshold:-1.0}" >> $GITHUB_ENV
+          echo "junit_xml_negative_threshold=${junit_xml_negative_threshold:-1.0}" >> $GITHUB_ENV
+          echo "enable_sd=${enable_sd:-true}" >> $GITHUB_ENV
+          echo "deps_installation_method=${deps_installation_method:-staged-dependencies}" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Restore npm cache 💰
+        if: >-
+          inputs.publish-unit-test-report-gh-pages == true
+            && github.event_name != 'pull_request'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          key: npm-${{ runner.os }}-${{ github.job }}
+          restore-keys: |
+            npm-${{ runner.os }}-
+          path: node_modules
+
+      - name: Setup NodeJS ☊
+        if: >-
+          inputs.publish-unit-test-report-gh-pages == true
+            && github.event_name != 'pull_request'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        id: npm-cache
+        with:
+          node-version: 20
+
+      - name: Install xunit-viewer ⚙️
+        if: >-
+          steps.npm-cache.outputs.cache-hit != 'true'
+            && inputs.publish-unit-test-report-gh-pages == true
+            && github.event_name != 'pull_request'
+        run: npm i -g xunit-viewer
+        shell: bash
+
+      - name: Restore SD cache 💰
+        if: >-
+          inputs.install-deps-from-package-repositories == ''
+            && env.deps_installation_method == 'staged-dependencies'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          key: sd-${{ runner.os }}-${{ github.event.repository.name }}
+          path: ~/.staged.dependencies
+
+      - name: Update R packages 🗓️
+        if: >-
+          inputs.update-r-packages == true
+        run: |
+          update.packages(ask=FALSE)
+        shell: Rscript {0}
+
+      - name: Run Staged dependencies 🎦
+        if: >-
+          env.enable_sd == 'true'
+            && inputs.install-deps-from-package-repositories == ''
+            && env.deps_installation_method == 'staged-dependencies'
+        uses: insightsengineering/staged-dependencies-action@v2
+        env:
+          GITHUB_PAT: ${{ steps.github-token.outputs.token }}
+        with:
+          path: ${{ github.event.repository.name }}/${{ inputs.package-subdirectory }}
+          enable-check: ${{ inputs.enable-staged-dependencies-check }}
+          run-system-dependencies: ${{ inputs.install-system-dependencies }}
+          direction: ${{ inputs.sd-direction }}
+
+      - name: Setup R dependencies 🎦
+        if: >-
+          env.deps_installation_method == 'setup-r-dependencies'
+          && inputs.install-deps-from-package-repositories == ''
+        uses: insightsengineering/setup-r-dependencies@v1
+        env:
+          GITHUB_PAT: ${{ steps.github-token.outputs.token }}
+        with:
+          lookup-refs: ${{ inputs.lookup-refs }}
+          repository-path: ${{ github.event.repository.name }}/${{ inputs.package-subdirectory }}
+          skip-desc-branch: ${{ inputs.skip-desc-branch }}
+          skip-desc-dev: ${{ inputs.skip-desc-dev }}
+          repository-list: ${{ inputs.repository-list }}
+          cache-version: ${{ inputs.cache-version }}
+
+      - name: Install dependencies from package repositories 🗄️
+        if: inputs.install-deps-from-package-repositories != ''
+        run: |
+          split_to_map <- function(args) {
+            tmp <- strsplit(x = unlist(strsplit(args, ",")), "=")
+            content <- unlist(lapply(tmp, function(x) x[2]))
+            names(content) <- unlist(lapply(tmp, function(x) x[1]))
+            return(content)
+          }
+          devtools::install_dev_deps(".", repos = split_to_map("${{ inputs.install-deps-from-package-repositories }}"))
+        shell: Rscript {0}
+        working-directory: ${{ github.event.repository.name }}/${{ inputs.package-subdirectory }}
+
+      - name: Show session info and installed packages ℹ
+        run: |
+          sessionInfo()
+          as.data.frame(installed.packages()[, c("LibPath", "Version")])
+          if (grepl("--as-cran", "${{ inputs.additional-r-cmd-check-params }}", fixed = TRUE)) {
+            x <- desc::desc_del("Remotes")
+          }
+          if ("${{ inputs.disable-unit-test-reports }}" != "true") {
+            x <- desc::desc_set_dep("xml2", "Suggests")
+          }
+        shell: Rscript {0}
+        working-directory: ${{ github.event.repository.name }}/${{ inputs.package-subdirectory }}
+
+      - name: Get package name 📦
+        run: |
+          echo "PKGBUILD=$(echo $(awk -F: '/Package:/{gsub(/[ ]+/,"") ; print $2}' DESCRIPTION)_"\
+          "$(awk -F: '/Version:/{gsub(/[ ]+/,"") ; print $2}' DESCRIPTION).tar.gz)" >> $GITHUB_ENV
+          echo "PKGNAME=$(echo $(awk -F: '/Package:/{gsub(/[ ]+/,"") ; print $2}' DESCRIPTION))" >> $GITHUB_ENV
+        shell: bash
+        working-directory: ${{ github.event.repository.name }}/${{ inputs.package-subdirectory }}
+
+      - name: Replace testthat.R for test reporting 🎚
+        if: inputs.disable-unit-test-reports != 'true'
+        run: |
+          if [ -f "tests/testthat.R" ]; then {
+            # Overwrite testthat.R for JUnit XML reporting
+            cat > tests/testthat.R <<EOF
+            pkg_name <- "${{ env.PKGNAME }}"
+            if (requireNamespace("testthat", quietly = TRUE)) {
+              library(testthat)
+              reporter <- MultiReporter\$new(list(
+                CheckReporter\$new(),
+                JunitReporter\$new(file = "junit-result.xml")
+              ))
+              test_check(pkg_name, reporter = reporter)
+            }
+          EOF
+          }
+          cat tests/testthat.R
+          fi
+        shell: bash
+        working-directory: ${{ github.event.repository.name }}/${{ inputs.package-subdirectory }}
+
+      - name: Restore any additional caches 📥
+        if: inputs.additional-caches != ''
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: "${{ inputs.additional-caches }}"
+          key: additional-caches-${{ runner.os }}
+          steps:
+      - name: Get changed files 📃
+        id: changed-files
+        if: inputs.selected-shinytests == true
+        # v45.0.8
+        uses: tj-actions/changed-files@a284dc1814e3fd07f2e34267fc8f81227ed29fb8
+        with:
+          path: ${{ github.event.repository.name }}/${{ inputs.package-subdirectory }}
+          files: |
+            tests/testthat/*.R
+            R/*.R
+
+      - name: Check only affected modules 🎯
+        if: inputs.selected-shinytests == true
+        working-directory: ${{ github.event.repository.name }}/${{ inputs.package-subdirectory }}
+        env:
+          ADDED: ${{ steps.changed-files.outputs.added }}
+          MODIFIED: ${{ steps.changed-files.outputs.modified_files }}
+        run: |
+          # Bash script run
+          commit_msg=$( git log -1 --pretty=%B )
+
+          # Set default TESTING_DEPTH
+          WORKFLOW_TESTING_DEPTH=$TESTING_DEPTH
+          if [ -z "$WORKFLOW_TESTING_DEPTH" ]
+          then {
+            echo "No TESTING_DEPTH default."
+            TESTING_DEPTH=5
+            WORKFLOW_TESTING_DEPTH=5
+            echo "Setting TESTING_DEPTH=${TESTING_DEPTH}"
+            echo "TESTING_DEPTH=${TESTING_DEPTH}" >> "$GITHUB_ENV"
+          } fi
+
+          echo "Commit msg is: ${commit_msg}"
+          # Exit early if tag is on commit message even if it set to true
+          test_all=$( echo "${commit_msg}" | grep -zvF "[run-all-tests]" | tr -d '\0')
+
+          if [ -z "$test_all" ]
+          then {
+            echo "Last commit message forces to test everything."
+            echo "Using TESTING_DEPTH=${TESTING_DEPTH}"
+            echo "TESTING_DEPTH=${TESTING_DEPTH}" >> "$GITHUB_ENV"
+            exit 0
+          } fi
+
+          test_dir="tests/testthat/"
+
+          ALL_CHANGED_FILES="${ADDED} ${MODIFIED}"
+          if [ -z "$ALL_CHANGED_FILES" ]
+          then {
+            echo "No R files affected: test everything."
+            echo Using "TESTING_DEPTH=${TESTING_DEPTH}"
+            echo "TESTING_DEPTH=${TESTING_DEPTH}" >> "$GITHUB_ENV"
+            exit 0
+          } fi
+
+          # Loop through each modified file and determine which tests to run
+          for file in $ALL_CHANGED_FILES; do
+
+              echo "Check for ${file}."
+              # Skip files that were renamed or deleted
+              if [ ! -f "$file" ]; then {
+                echo "File not found!"
+                continue
+              } fi
+
+              # Extract the base name of the file, examples:
+              # tests/testthat/test-shinytest2-foo.R -> foo
+              # R/foo.R -> foo
+              base_name=$(basename "$file" .R | sed s/test-shinytest2-//g)
+              # Find matching test files (parenthesis to not match arguments)
+              test_files=$(grep -l "$base_name(" "$test_dir"test-shinytest2-*.R || echo "")
+              # Modify in place so that only modified modules are tested.
+              if [ -z "$test_files" ];
+              then {
+                  git restore $test_dir
+                  echo "Run all tests: Helpers modifications detected."
+                  TESTING_DEPTH="${WORKFLOW_TESTING_DEPTH}";
+                  break;
+              } else {
+                  sed -i 's/skip_if_too_deep(5)/skip_if_too_deep(3)/g' "$test_files"
+                  TESTING_DEPTH=3
+                  echo "Testing with shinytest2 only for $test_files";
+              } fi
+          done
+
+          echo "At the end, using TESTING_DEPTH=${TESTING_DEPTH}"
+          echo "TESTING_DEPTH=${TESTING_DEPTH}" >> "$GITHUB_ENV"
+        shell: bash
+
+      - name: Build R package 🏗
+        run: |
+          if [ "${{ inputs.additional-env-vars }}" != "" ]
+          then {
+            echo -e "${{ inputs.additional-env-vars }}" > /tmp/dotenv.env
+            export $(tr '\n' ' ' < /tmp/dotenv.env)
+          }
+          fi
+          ADDITIONAL_PARAMS=${{ inputs.additional-r-cmd-build-params }}
+          R CMD build ${ADDITIONAL_PARAMS} \
+            ${{ github.event.repository.name }}/${{ inputs.package-subdirectory }}
+        shell: bash
+
+      - name: Run R CMD check 🏁
+        run: |
+          if [ "${{ inputs.skip-r-cmd-check }}" == "true" ]
+          then {
+            echo "Skipping R CMD check as 'skip-r-cmd-check' was set to 'true'"
+            exit 0
+          }
+          fi
+          if [ "${{ inputs.R_CHECK_FORCE_SUGGESTS }}" == "" ]
+          then {
+            _R_CHECK_FORCE_SUGGESTS_="FALSE"
+          }
+          fi
+          ADDITIONAL_PARAMS=${{ inputs.additional-r-cmd-check-params }}
+          if [[ ! -z "${{ env.NO_TESTS }}" ]]
+          then {
+            ADDITIONAL_PARAMS="${ADDITIONAL_PARAMS} --no-tests"
+          }
+          fi
+          if [ "${{ inputs.additional-env-vars }}" != "" ]
+          then {
+            echo -e "${{ inputs.additional-env-vars }}" > /tmp/dotenv.env
+            export $(tr '\n' ' ' < /tmp/dotenv.env)
+          }
+          fi
+          Rscript - <<EOF
+          if ("${{ inputs.disable-unit-test-reports }}" != "true") {
+            if (!require("xml2")) {
+              install.packages("xml2", repos = "https://cloud.r-project.org", quiet = TRUE)
+            }
+          }
+          EOF
+          R CMD check ${ADDITIONAL_PARAMS} ${{ env.PKGBUILD }}
+        shell: bash
+        continue-on-error: true
+        env:
+          _R_CHECK_TESTS_NLINES_: 0
+          _R_CHECK_VIGNETTES_NLINES_: 0
+          _R_CHECK_FORCE_SUGGESTS_: ${{ inputs.R_CHECK_FORCE_SUGGESTS }}
+
+      - name: Fetch report from ${{ env.junit_xml_storage }} ⤵️
+        if: env.junit_xml_comparison == 'true'
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          path: ${{ env.junit_xml_storage }}
+          fetch-depth: 0
+
+      - name: Initialize storage branch ${{ env.junit_xml_storage }} 🗄️
+        if: env.junit_xml_comparison == 'true'
+        working-directory: ${{ env.junit_xml_storage }}
+        run: |
+          git config --global --add safe.directory ${PWD}
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          # Switch to the branch if it already exists
+          git switch ${{ env.junit_xml_storage }} || true
+          git pull origin ${{ env.junit_xml_storage }} || true
+          # Create the branch if it doesn't exist yet
+          git checkout --orphan ${{ env.junit_xml_storage }} || true
+          # Ensure that the bare minimum components exist in the branch
+          mkdir -p data
+          touch README.md data/.gitkeep
+          # Copy necessary files and folders to a temporary location
+          mkdir -p /tmp/${{ github.sha }}
+          echo "Copying data to /tmp/${{ github.sha }}"
+          cp -r .git README.md data /tmp/${{ github.sha }}
+          # Remove everything else
+          # Attribution: https://unix.stackexchange.com/a/77313
+          rm -rf ..?* .[!.]* *
+          # Restore files from the temporary location
+          echo "Copying data from /tmp/${{ github.sha }}"
+          cp -r /tmp/${{ github.sha }}/.git /tmp/${{ github.sha }}/README.md /tmp/${{ github.sha }}/data .
+          rm -rf /tmp/${{ github.sha }}
+          git add --all -f
+          git commit -m "Update storage branch: $(date)" || true
+        shell: bash
+
+      - name: Push storage branch ${{ env.junit_xml_storage }} 🗄️
+        if: env.junit_xml_comparison == 'true'
+        uses: ad-m/github-push-action@4cc74773234f74829a8c21bc4d69dd4be9cfa599 # master
+        with:
+          github_token: ${{ steps.github-token.outputs.token }}
+          branch: ${{ env.junit_xml_storage }}
+          directory: ${{ env.junit_xml_storage }}
+          force: true
+        continue-on-error: true
+
+      - name: Check whether JUnit XML report exists 🚦
+        id: check-junit-xml
+        uses: andstor/file-existence-action@076e0072799f4942c8bc574a82233e1e4d13e9d6 # v3
+        with:
+          files: "${{ env.PKGNAME }}.Rcheck/tests/testthat/junit-result.xml"
+
+      - name: Convert JUnit XML to HTML 📝
+        if: >-
+          steps.check-junit-xml.outputs.files_exists == 'true'
+            && inputs.publish-unit-test-report-gh-pages == true
+            && github.event_name != 'pull_request'
+        run: |
+          brand_option=""
+          if [ "${{ inputs.unit-test-report-brand }}" != "" ]; then
+            brand_option='--brand ${{ inputs.unit-test-report-brand }}'
+          fi
+          xunit-viewer -r "${{ env.PKGNAME }}.Rcheck/tests/testthat/junit-result.xml" \
+            -o index.html \
+            -f "https://www.clipboardmaster.com/favicon.ico" \
+            -t "${{ env.PKGNAME }} Unit Test Results" \
+            $brand_option
+        shell: bash
+
+      - name: Publish JUnit XML as artifact 📰
+        if: >-
+          steps.check-junit-xml.outputs.files_exists == 'true'
+            && inputs.publish-unit-test-report-gh-pages == true
+            && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: unit-test-report-${{ inputs.concurrency-group }}
+          path: "index.html"
+
+      - name: Set output ⚙️
+        id: junit-output
+        if: >-
+          steps.check-junit-xml.outputs.files_exists == 'true'
+            && inputs.publish-unit-test-report-gh-pages == true
+            && github.event_name != 'pull_request'
+        run: echo "junit-upload=true" >> $GITHUB_OUTPUT
+
+      - name: Publish Unit Test Summary 📑
+        uses: EnricoMi/publish-unit-test-result-action@c950f6fb443cb5af20a377fd0dfaa78838901040 # v2
+        id: test-results
+        # Second line of the condition skips the step if workflow is running in a fork.
+        if: |
+          steps.check-junit-xml.outputs.files_exists == 'true' && github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
+        with:
+          check_name: Unit Tests Summary
+          junit_files: "${{ env.PKGNAME }}.Rcheck/tests/testthat/junit-result.xml"
+
+      - name: Fetch JUnit XML reports from ${{ env.junit_xml_storage }} ⤵️
+        if: steps.check-junit-xml.outputs.files_exists == 'true' && env.junit_xml_comparison == 'true'
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          path: ${{ env.junit_xml_storage }}
+          fetch-depth: 0
+
+      - name: Set up ${{ env.junit_xml_storage }} branch for reports 🗃️
+        if: steps.check-junit-xml.outputs.files_exists == 'true' && env.junit_xml_comparison == 'true'
+        run: |
+          BRANCH=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
+          echo "diff_storage_branch=$BRANCH" >> $GITHUB_ENV
+          mkdir -p ${{ env.junit_xml_storage }}/data/${BRANCH}
+        shell: bash
+
+      - name: Commit JUnit XML report 📄
+        if: steps.check-junit-xml.outputs.files_exists == 'true' && env.junit_xml_comparison == 'true'
+        working-directory: ${{ env.junit_xml_storage }}/data
+        run: |
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git switch ${{ env.junit_xml_storage }} || true
+          git config pull.rebase false
+          git pull origin ${{ env.junit_xml_storage }} || true
+          cp ../../${{ env.PKGNAME }}.Rcheck/tests/testthat/junit-result.xml \
+            './${{ env.diff_storage_branch }}/junit-result.xml'
+          git add -f '${{ env.diff_storage_branch }}/junit-result.xml'
+          git commit -m "Add/Update JUnit report: ${{ github.sha }}" || true
+        shell: bash
+
+      - name: Push JUnit XML report to ${{ env.junit_xml_storage }} 📄
+        if: steps.check-junit-xml.outputs.files_exists == 'true' && env.junit_xml_comparison == 'true'
+        uses: ad-m/github-push-action@4cc74773234f74829a8c21bc4d69dd4be9cfa599 # master
+        with:
+          github_token: ${{ steps.github-token.outputs.token }}
+          branch: ${{ env.junit_xml_storage }}
+          directory: ${{ env.junit_xml_storage }}/data
+        continue-on-error: true
+
+      - name: Run XML comparison 🔍
+        if: steps.check-junit-xml.outputs.files_exists == 'true' && env.junit_xml_comparison == 'true'
+        run: |
+          cp '${{ env.junit_xml_storage }}/data/${{ env.diff_storage_branch }}/junit-result.xml' new.xml
+          if [ ! -f ${{ env.junit_xml_storage }}/data/${{ env.junit_xml_diff_branch }}/junit-result.xml ]; then
+            # If XML for the branch against which we're comparing doesn't exist, we're skipping the comparison.
+            echo "JUnit report for branch \`${{ env.junit_xml_diff_branch }}\` " \
+              "doesn't exist on \`${{ env.junit_xml_storage }}\` branch yet." > output.md
+            echo "Once this workflow runs on \`${{ env.junit_xml_diff_branch }}\` branch, " \
+              "you'll see comparison of tests performance between \`${{ env.junit_xml_diff_branch }}\` " \
+              "and \`${{ env.diff_storage_branch }}\` as a PR comment." >> output.md
+          else
+            cp ${{ env.junit_xml_storage }}/data/${{ env.junit_xml_diff_branch }}/junit-result.xml old.xml
+            wget https://github.com/insightsengineering/junit-xml-diff/releases/download/v0.4.0/junit-xml-diff_0.4.0_linux_amd64.tar.gz \
+             -O junit-xml-diff.tar.gz
+            tar xzf junit-xml-diff.tar.gz
+            ./junit-xml-diff old.xml new.xml output.md '${{ env.junit_xml_diff_branch }}' \
+              '${{ env.junit_xml_positive_threshold }}' '${{ env.junit_xml_negative_threshold }}'
+            if [ "$(du -b output.md | awk '{print $1}')" != "0" ]; then
+              # Non-empty output which means that there is at least one test suite/case in the table.
+              # Empty table won't be published since junit_xml_comparison_result_method won't be set.
+              echo "junit_xml_comparison_result_method=comment" >> $GITHUB_ENV
+              echo "" >> output.md
+              echo "Results for commit ${{ github.sha }}" >> output.md
+              echo "" >> output.md
+              echo "♻️ This comment has been updated with latest results." >> output.md
+              cp output.md output-artifact.md
+              echo "Size of markdown: $(du -b output.md | awk '{print $1}') bytes"
+              if [ "$(du -b output.md | awk '{print $1}')" -ge "60000" ]; then
+                echo "The result of JUnit XML file comparison exceeded maximum size. " \
+                  "The report has therefore been uploaded as an R CMD check workflow artifact." > output.md
+                echo "junit_xml_comparison_result_method=artifact" >> $GITHUB_ENV
+              fi
+              echo "Markdown output:"
+              cat output.md
+            else
+              echo "No test suites/cases in JUnit XML file difference."
+            fi
+          fi
+
+      - name: Post JUnit XML comparison as comment 💬
+        if: >
+          steps.check-junit-xml.outputs.files_exists == 'true' &&
+          env.junit_xml_comparison == 'true' &&
+          env.junit_xml_comparison_result_method == 'comment' &&
+          !github.event.pull_request.head.repo.fork &&
+          github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@773744901bac0e8cbb5a0dc842800d45e9b2b405 # v2
+        with:
+          header: markdown-table
+          path: output.md
+        continue-on-error: true
+
+      - name: Upload JUnit XML comparison ⤴
+        if: >
+          steps.check-junit-xml.outputs.files_exists == 'true' &&
+          env.junit_xml_comparison == 'true' &&
+          env.junit_xml_comparison_result_method == 'artifact' &&
+          !github.event.pull_request.head.repo.fork &&
+          github.event_name == 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          path: output-artifact.md
+          name: junit-xml-report-comparison
+        continue-on-error: true
+
+      - name: Show R CMD check logs 🔎
+        if: inputs.skip-r-cmd-check != true
+        run: |
+          find ${{ env.PKGNAME }}.Rcheck -type f -regextype posix-egrep \
+            -regex '.*00install.out|.*00check.log|.*00build.out|.*-Ex.Rout|.*tests/testthat\.Rout.*' \
+            -print0 | while IFS= read -r -d $'\0' file; do
+              # Grouping allows to collapse/expand logs when needed.
+              echo "::group::$file"
+              cat $file
+              echo "::endgroup::"
+          done
+        shell: bash
+
+      - name: Catch warnings in R CMD check output 🗳
+        id: catch-errors
+        run: |
+          check_log <- "${{ env.PKGNAME }}.Rcheck/00check.log"
+          if (file.exists(check_log)) {
+            x <- tail(readLines(check_log), 1)
+            if (grepl("ERROR", x)) {
+              writeLines(readLines(check_log))
+              stop("❌ R CMD check has errors. Please refer to the 'Show R CMD check logs 🔎' step above.")
+            }
+            if (grepl("WARNING", x)) {
+              writeLines(readLines(check_log))
+              stop("⚠ R CMD check has warnings. Please refer to the 'Show R CMD check logs 🔎' step above.")
+            }
+            if ("${{ inputs.enforce-note-blocklist }}" == "true") {
+              print("Checking notes...")
+              regexes <- "${{ inputs.note-blocklist }}"
+              regexes <- unlist(strsplit(regexes, split = "\n"))
+              lines <- paste(readLines(check_log), collapse = "\n")
+              notes_result <- vapply(
+                regexes,
+                function(r){
+                  if (grepl(paste0(r, "\n"), lines, perl=T)) {
+                    print(r)
+                    return(TRUE)
+                  }
+                  return(FALSE)
+                },
+                logical(1)
+              )
+              if (any(notes_result)) {
+                stop("NOTEs on the blocklist were found. Please refer to the 'Run R CMD check 🏁' step above.")
+              }
+            }
+          }
+        shell: Rscript {0}
+
+      - name: Install R package 🚧
+        run: |
+          if [ "${{ inputs.skip-r-cmd-install }}" == "true" ]
+          then {
+            echo "Skipping R CMD INSTALL as 'skip-r-cmd-install' was set to 'true'"
+            exit 0
+          }
+          fi
+          if [ "${{ inputs.additional-env-vars }}" != "" ]
+          then {
+            echo -e "${{ inputs.additional-env-vars }}" > /tmp/dotenv.env
+            export $(tr '\n' ' ' < /tmp/dotenv.env)
+          }
+          fi
+          R CMD INSTALL ${{ env.PKGBUILD }}
+        shell: bash
+
+      - name: Rebuild R package 🏗
+        if: >
+          (inputs.disable-unit-test-reports != 'true' ||
+            startsWith(github.ref, 'refs/tags/v')) &&
+            github.event_name != 'pull_request'
+        run: |
+          # Undo changes to DESCRIPTION and tests/testthat.R
+          git checkout DESCRIPTION
+          if [ -f "tests/testthat.R" ]; then
+            git checkout tests/testthat.R
+          fi
+          if [ "${{ inputs.additional-env-vars }}" != "" ]
+          then {
+            echo -e "${{ inputs.additional-env-vars }}" > /tmp/dotenv.env
+            export $(tr '\n' ' ' < /tmp/dotenv.env)
+          }
+          fi
+
+          ADDITIONAL_PARAMS=${{ inputs.additional-r-cmd-build-params }}
+          if [ "${{ inputs.disable-package-rebuild-and-upload }}" != "true" ]
+          then {
+            R CMD build ${ADDITIONAL_PARAMS} .
+          } else {
+            echo "🙅🏼‍♀️ Not rebuilding package for uploads"
+          }
+          fi
+        shell: bash
+        working-directory: ${{ github.event.repository.name }}/${{ inputs.package-subdirectory }}
+
+      - name: Upload package build ⤴
+        if: >
+          startsWith(github.ref, 'refs/tags/v') &&
+            inputs.disable-package-rebuild-and-upload != 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          path: ${{ github.event.repository.name }}/${{ inputs.package-subdirectory }}/${{ env.PKGBUILD }}
+          name: ${{ env.PKGBUILD }}
+          overwrite: true
+
+      - name: Upload logs artifact 🗞️
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          path: |
+            ${{ env.PKGNAME }}.Rcheck/*00install.out
+            ${{ env.PKGNAME }}.Rcheck/*00check.log
+            ${{ env.PKGNAME }}.Rcheck/*00build.out
+            ${{ env.PKGNAME }}.Rcheck/*-Ex.Rout
+            ${{ env.PKGNAME }}.Rcheck/tests/testthat.Rout
+            ${{ env.PKGNAME }}.Rcheck/tests/testthat.Rout.fail
+          name: check-logs-${{ env.PKGNAME }}-${{ inputs.concurrency-group }}
+
+  publish-junit-html-report:
+    name: Publish JUnit HTML report 📰
+    runs-on: ubuntu-latest
+    needs: build-install-check
+    if: >
+      needs.build-install-check.outputs.publish-unit-test-html-report == 'true'
+        && github.event_name != 'pull_request'
+    # Only one job can publish to gh-pages branch concurrently.
+    concurrency:
+      group: ghpages
+    steps:
+      - name: Setup token 🔑
+        id: github-token
+        run: |
+          if [ "${{ secrets.GITHUB_TOKEN }}" == "" ]; then
+            echo "GITHUB_TOKEN is empty. Substituting it with GITHUB_TOKEN."
+            echo "token=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_OUTPUT
+          else
+            echo "Using GITHUB_TOKEN."
+            echo "token=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Download JUnit HTML report as artifact ⤵️
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: unit-test-report-${{ inputs.concurrency-group }}
+          path: unit-test-report
+
+      - name: Upload JUnit HTML report to GitHub pages 🗞️
+        if: needs.build-install-check.outputs.multiversion-docs == 'true'
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4
+        with:
+          github_token: ${{ steps.github-token.outputs.token }}
+          publish_dir: ./unit-test-report
+          destination_dir: ${{ needs.build-install-check.outputs.current-branch-or-tag }}/${{ inputs.unit-test-report-directory }}
+
+      - name: Upload JUnit HTML report to GitHub pages (latest-tag) 🏷️
+        if: >
+          needs.build-install-check.outputs.is-latest-tag == 'true'
+            && needs.build-install-check.outputs.multiversion-docs == 'true'
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4
+        with:
+          github_token: ${{ steps.github-token.outputs.token }}
+          publish_dir: ./unit-test-report
+          destination_dir: ${{ inputs.latest-tag-alt-name }}/${{ inputs.unit-test-report-directory }}
+
+      - name: Upload JUnit HTML report to GitHub pages (release-candidate) 🏷️
+        if: >
+          needs.build-install-check.outputs.is-rc-tag == 'true'
+            && needs.build-install-check.outputs.multiversion-docs == 'true'
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4
+        with:
+          github_token: ${{ steps.github-token.outputs.token }}
+          publish_dir: ./unit-test-report
+          destination_dir: ${{ inputs.release-candidate-alt-name }}/${{ inputs.unit-test-report-directory }}
+
+      - name: Upload JUnit HTML report to GitHub pages (non-multiversion) 🗞️
+        if: needs.build-install-check.outputs.multiversion-docs == 'false'
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4
+        with:
+          github_token: ${{ steps.github-token.outputs.token }}
+          publish_dir: ./unit-test-report
+          destination_dir: ${{ inputs.unit-test-report-directory }}
+
+  upload-release-assets:
+    name: Upload build tar.gz
+    needs: build-install-check
+    runs-on: ubuntu-latest
+    if: >
+      startsWith(github.ref, 'refs/tags/v')
+        && (!contains(github.event.commits[0].message, '[skip r-cmd]'))
+        && github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout repo 🛎
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Get package build filename 📦
+        run: |
+          echo "PKGBUILD=$(echo $(awk -F: '/Package:/{gsub(/[ ]+/,"") ; print $2}' DESCRIPTION)_"\
+          "$(awk -F: '/Version:/{gsub(/[ ]+/,"") ; print $2}' DESCRIPTION).tar.gz)" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Download artifact ⏬
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ env.PKGBUILD }}
+
+      - name: Check if release exists
+        id: check-if-release-exists
+        uses: insightsengineering/release-existence-action@v1
+
+      - name: Upload binaries to release 🔼
+        if: >-
+          steps.check-if-release-exists.outputs.release-exists == 'true'
+        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ${{ env.PKGBUILD }}
+          asset_name: ${{ env.PKGBUILD }}
+          tag: ${{ github.ref }}
+          overwrite: true

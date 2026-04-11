@@ -1,0 +1,153 @@
+---
+name: gitleaks 💧
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    branches:
+      - main
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      additional-args:
+        description: Additional arguments to pass to 'gitleaks detect'
+        required: false
+        type: string
+        default: ""
+      check-for-pii:
+        description: Check for any instances of PII data in the repository
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: gitleaks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitleaks:
+    name: gitleaks 💧
+    runs-on: ubuntu-latest
+    if: >
+      !contains(github.event.commits[0].message, '[skip gitleaks]')
+        && github.event.pull_request.draft == false
+
+    steps:
+      - name: Get branch names 🌿
+        id: branch-name
+        uses: tj-actions/branch-names@e497ceb8ccd43fd9573cf2e375216625bc411d1f # v9.0.0
+
+      - name: Checkout repo (PR) 🛎
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        if: github.event_name == 'pull_request'
+        with:
+          ref: ${{ steps.branch-name.outputs.head_ref_branch }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+
+      - name: Checkout repo 🛎
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        if: github.event_name != 'pull_request'
+        with:
+          ref: ${{ steps.branch-name.outputs.current_branch }}
+
+      - name: Check commit message 💬
+        run: |
+          git config --global --add safe.directory $(pwd)
+          export head_commit_message="$(git show -s --format=%B | tr '\r\n' ' ' | tr '\n' ' ')"
+          echo "head_commit_message = $head_commit_message"
+          if [[ $head_commit_message == *"$SKIP_INSTRUCTION"* ]]; then
+            echo "Skip instruction detected - cancelling the workflow."
+            exit 1
+          fi
+        shell: bash
+        env:
+          SKIP_INSTRUCTION: "[skip gitleaks]"
+
+      - name: Download and install gitleaks 💧
+        run: |
+          cd /tmp
+          sudo wget -q \
+            "https://github.com/zricethezav/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            -O gitleaks.tar.gz || \
+            (echo "Error downloading gitleaks ${GITLEAKS_VERSION} tarball" && exit 1)
+          sudo tar -xvzf gitleaks.tar.gz || \
+            (echo "Error unarchiving gitleaks ${GITLEAKS_VERSION} tarball" && exit 1)
+          sudo mv gitleaks /usr/bin/. || \
+            (echo "Error moving gitleaks for /usr/bin" && exit 1)
+        shell: bash
+        env:
+          GITLEAKS_VERSION: "8.18.1"
+
+      - name: Run gitleaks ☔
+        run: gitleaks -v detect --no-git ${{ inputs.additional-args }} --source .
+        shell: bash
+
+  pii-check:
+    name: PII Check 💳
+    runs-on: ubuntu-latest
+    if: >
+      !contains(github.event.commits[0].message, '[skip pii-check]')
+        && github.event.pull_request.draft == false
+        && inputs.check-for-pii == true
+
+    steps:
+      - name: Get branch names 🌿
+        id: branch-name
+        uses: tj-actions/branch-names@e497ceb8ccd43fd9573cf2e375216625bc411d1f # v9.0.0
+
+      - name: Checkout repo (PR) 🛎
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        if: github.event_name == 'pull_request'
+        with:
+          ref: ${{ steps.branch-name.outputs.head_ref_branch }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 0
+
+      - name: Checkout repo 🛎
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        if: github.event_name != 'pull_request'
+        with:
+          ref: ${{ steps.branch-name.outputs.current_branch }}
+          fetch-depth: 0
+
+      - name: Check commit message 💬
+        run: |
+          git config --global --add safe.directory $(pwd)
+          export head_commit_message="$(git show -s --format=%B | tr '\r\n' ' ' | tr '\n' ' ')"
+          echo "head_commit_message = $head_commit_message"
+          if [[ $head_commit_message == *"$SKIP_INSTRUCTION"* ]]; then
+            echo "Skip instruction detected - cancelling the workflow."
+            exit 1
+          fi
+        shell: bash
+        env:
+          SKIP_INSTRUCTION: "[skip pii-check]"
+
+      - name: Run Presidio to check for PII ☔
+        uses: insightsengineering/presidio-action@v1
+        with:
+          configuration-data: |
+            threshold: 0.95
+            ignore: |
+              .git
+              **/*.svg
+              **/*.png
+              **/*.rds
+              **/*.rda
+              **/*.jpg
+              **/*.gif
+              .gitlab-ci.yml
+              .Rbuildignore
+              _pkgdown.yml
+              inst/WORDLIST
+              **/*.RData
+              **/*.xlsx
+          output: "github"
+          only-changed-files: true

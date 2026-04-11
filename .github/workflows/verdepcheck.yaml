@@ -1,0 +1,149 @@
+---
+name: Dependency Test 🔢
+
+on:
+  workflow_call:
+    secrets:
+      GITHUB_TOKEN:
+        description: |
+          Github token with read access to repositories, required for dependencies installation
+        required: false
+      GCHAT_WEBHOOK:
+        description: |
+          Google Chat webhook to send failure notifications
+        required: false
+    inputs:
+      check-args:
+        description: Additional check arguments.
+        required: false
+        default: ""
+        type: string
+      build-args:
+        description: Additional build arguments.
+        required: false
+        default: ""
+        type: string
+      strategy:
+        description: |
+          Strategy to test package dependencies. One of: min_isolate, min_cohort, release, max.
+        required: true
+        type: string
+      extra-deps:
+        description: |
+          Extra dependencies specified similarly as in the `DESCRIPTION` file,
+          i.e. `"<package name> (<operator> <version>)"` where both `<operator>`
+          and `<version>` are optional. Multiple entries are possible separated by `";"`.
+        required: false
+        default: ""
+        type: string
+      additional-env-vars:
+        description: |
+          Extra environment variables, as a 'key=value' pair, with each pair on a new line.
+          Example usage:
+          additional-env-vars: |
+            ABC=123
+            XYZ=456
+        required: false
+        default: ""
+        type: string
+      additional-repos:
+        description: |
+          Optional value that add R repositories for a given strategy. Multiple entries are possible separated by `";"`.
+            additional-repos: https://repo1.example.com;https://repo2.example.com
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  dependency-test:
+    name: Dependency Test 🔢
+    runs-on: ubuntu-latest
+    if: >
+      !contains(github.event.commits[0].message, '[skip dependency-test]')
+        && github.event.pull_request.draft == false
+    container:
+      image: ghcr.io/insightsengineering/rstudio:latest
+
+    steps:
+      - name: Setup token 🔑
+        id: github-token
+        run: |
+          if [ "${{ secrets.GITHUB_TOKEN }}" == "" ]; then
+            echo "GITHUB_TOKEN is empty. Substituting it with GITHUB_TOKEN."
+            echo "token=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_OUTPUT
+          else
+            echo "Using GITHUB_TOKEN."
+            echo "token=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Get branch names 🌿
+        id: branch-name
+        uses: tj-actions/branch-names@e497ceb8ccd43fd9573cf2e375216625bc411d1f # v9.0.0
+
+      - name: Checkout repo 🛎
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          ref: ${{ steps.branch-name.outputs.current_branch }}
+          fetch-depth: 1
+
+      - name: Check commit message 💬
+        run: |
+          git config --global --add safe.directory $(pwd)
+          export head_commit_message="$(git show -s --format=%B | tr '\r\n' ' ' | tr '\n' ' ')"
+          echo "head_commit_message = $head_commit_message"
+          if [[ $head_commit_message == *"$SKIP_INSTRUCTION"* ]]; then
+            echo "Skip instruction detected - cancelling the workflow."
+            exit 1
+          fi
+        shell: bash
+        env:
+          SKIP_INSTRUCTION: "[skip dependency-test]"
+
+      - name: Normalize variables 📏
+        run: |
+          strategy="${{ inputs.strategy }}"
+          echo "strategy=${strategy:-release}" >> $GITHUB_ENV
+          echo "gchat_webhook=${{ secrets.GCHAT_WEBHOOK }}" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Restore cache 💰
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          key: verdepcheck-${{ runner.os }}-${{ github.event.repository.name }}-${{ env.strategy }}
+          path: |
+            ~/.cache/R/pkgcache/pkg
+
+      - name: Dependency Test - ${{ env.strategy }} 🔢
+        id: verdepcheck
+        uses: insightsengineering/r-verdepcheck-action@main
+        with:
+          github-token: ${{ steps.github-token.outputs.token }}
+          extra-deps: ${{ inputs.extra-deps }}
+          build-args: ${{ inputs.build-args }}
+          check-args: ${{ inputs.check-args }}
+          strategy: ${{ env.strategy }}
+          additional-env-vars: ${{ inputs.additional-env-vars }}
+          additional-repos: ${{ inputs.additional-repos }}
+
+      - name: GChat notification 🔔
+        if: (failure() || cancelled()) && steps.verdepcheck.outcome != 'success' && env.gchat_webhook != ''
+        uses: insightsengineering/google-chat-notification@master
+        with:
+          name: ${{ github.event.repository.name }} - Dependency Test - ${{ env.strategy }}
+          url: ${{ secrets.GCHAT_WEBHOOK }}
+          status: ${{ job.status }}
+
+      - name: Upload lock file ⤴️
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: "lock-file-${{ env.strategy }}"
+          path: pkg.lock
+
+      - name: Upload output file ⤴️
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: "res-${{ env.strategy }}"
+          path: res.RDS
