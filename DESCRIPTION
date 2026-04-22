@@ -15,7 +15,8 @@ Depends:
     R (>= 4.4),
     crane
 Imports:
-    rlang
+    rlang,
+    stringi
 Suggests:
     testthat (>= 3.3.0)
 VignetteBuilder:

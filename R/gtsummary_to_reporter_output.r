@@ -61,12 +61,17 @@
 #'   a plain `data.frame` to export.
 #' @param file_path Output path. The extension is ignored and output files are
 #'   written according to `output_types`.
-#' @param max_table_width Maximum total table width. If `NULL`, derived from
-#'   `report_paper_size`, `report_orientation`, `report_units`, and
-#'   `report_margins`.
-#' @param min_col_width Minimum width allowed for any column.
-#' @param column_widths Optional manual column widths, either numeric vector or
-#'   a `"|"`-delimited string (e.g. `"10|5|5"`).
+#' @param max_table_width Maximum total table width in `report_units`. If
+#'   `NULL`, derived from page geometry. Always capped at the page usable width
+#'   (paper minus margins) to prevent table overflow.
+#' @param min_col_width Minimum width allowed for any column, in `report_units`.
+#' @param column_widths Optional manual column widths in `report_units`, either
+#'   a numeric vector or a `"|"`-delimited string (e.g. `"10|5|5"`).
+#' @param max_chars_per_line Optional integer. Constrains the total table width
+#'   so that at most this many characters fit across one TXT line (Courier at
+#'   12 CPI). Applied after `max_table_width`, so the stricter limit wins.
+#'   Useful when the character budget is known (e.g. `max_chars_per_line = 132`
+#'   for a 132-column terminal or legacy print file).
 #' @param column_labels Optional column header overrides, as a named vector/list
 #'   or a data frame with `column` and `label`.
 #' @param spanning_headers Optional spanning header definitions, as a data frame
@@ -126,6 +131,7 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
                                            save_rds = TRUE,
                                            rds_dir = "rds",
                                            rows_per_page = NULL,
+                                           max_chars_per_line = NULL,
                                            debug_indent = FALSE,
                                            debug_spanning = FALSE,
                                            group_columns = NULL,
@@ -375,13 +381,33 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
   shared <- intersect(names(col_widths), names(label_widths))
   col_widths[shared] <- pmax(col_widths[shared], label_widths[shared])
 
+  # calc_col_width always works in inches; convert to report_units if needed
+  if (tolower(report_units) == "cm") col_widths <- col_widths * 2.54
+
+  # Track whether the user explicitly constrained the table width.  When TRUE,
+  # the label column is expanded to fill any slack so the table reaches the
+  # requested width (useful for giving footnotes more horizontal room).
+  user_constrained_width <- !is.null(max_table_width) || !is.null(max_chars_per_line)
+
+  # Resolve max_table_width: always cap at the page usable width so reporter
+  # never receives columns that exceed the printable area.
+  page_max <- compute_max_table_width(
+    paper_size  = report_paper_size,
+    orientation = report_orientation,
+    units       = report_units,
+    margins     = report_margins
+  )
   if (is.null(max_table_width)) {
-    max_table_width <- compute_max_table_width(
-      paper_size  = report_paper_size,
-      orientation = report_orientation,
-      units       = report_units,
-      margins     = report_margins
-    )
+    max_table_width <- page_max
+  } else {
+    max_table_width <- min(max_table_width, page_max)
+  }
+
+  if (!is.null(max_chars_per_line)) {
+    # TXT Courier uses exactly 12 CPI; convert character budget to physical width
+    chars_width_in <- as.numeric(max_chars_per_line) / 12
+    chars_width    <- if (tolower(report_units) == "cm") chars_width_in * 2.54 else chars_width_in
+    max_table_width <- min(max_table_width, chars_width)
   }
 
   manual_widths <- parse_column_widths(column_widths, n_cols = length(col_widths))
@@ -409,6 +435,10 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
       remaining   <- max_table_width - label_width
       if (total_other > remaining && total_other > 0) {
         other_widths <- other_widths * (remaining / total_other)
+      } else if (user_constrained_width) {
+        # User explicitly asked for a specific width: expand label to fill slack
+        slack       <- max_table_width - label_width - sum(other_widths)
+        label_width <- label_width + max(0, slack)
       }
 
       col_widths <- c(label = label_width, other_widths)
@@ -425,13 +455,16 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
   # font_size, and reserves 1 character per column for the inter-column
   # separator. The effective content width is therefore:
   #   floor(col_width_in * 12) - 1
+  # col_widths are in report_units; convert to inches first for CPI arithmetic.
   # Pre-wrapping to this limit prevents reporter from re-wrapping our lines,
   # which would strip the leading-space indentation from continuation lines.
   if ("label" %in% names(processed_df) &&
       "label" %in% names(col_widths) &&
       is.finite(col_widths[["label"]])) {
     cpi             <- 12L
-    max_label_chars <- max(10L, floor(col_widths[["label"]] * cpi) - 1L)
+    label_width_in  <- if (tolower(report_units) == "cm") col_widths[["label"]] / 2.54
+                       else col_widths[["label"]]
+    max_label_chars <- max(10L, floor(label_width_in * cpi) - 1L)
 
     processed_df$label <- vapply(
       as.character(processed_df$label),
@@ -450,7 +483,7 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
   span_use <- if (!is.null(spanning_headers)) {
     normalize_spanning_headers(spanning_headers)
   } else if (!is.null(styling)) {
-    styling$spanning_header
+    convert_gts_spanning_header(styling$spanning_header, ordered_cols)
   } else {
     NULL
   }
@@ -483,14 +516,22 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
   }
 
   if (is.null(rows_per_page)) {
-    rows_per_page <- estimate_rows_per_page(
+    geom_args <- list(
       row_count   = nrow(processed_df),
-      font_size   = report_font_size,
       paper_size  = report_paper_size,
       orientation = report_orientation,
       units       = report_units,
       margins     = report_margins
     )
+    out_upper     <- toupper(output_types)
+    rpp_candidates <- c(
+      if ("RTF" %in% out_upper)
+        do.call(estimate_rows_per_page, c(geom_args, list(font_size = report_font_size))),
+      if ("TXT" %in% out_upper)
+        # TXT renderer ignores font_size and uses fixed 6 LPI (Courier 12 CPI)
+        do.call(estimate_rows_per_page, c(geom_args, list(lpi = 6L)))
+    )
+    rows_per_page <- if (length(rpp_candidates) > 0) min(rpp_candidates) else NULL
   }
 
   # Package all build_table_spec context into one list for DRY call sites
