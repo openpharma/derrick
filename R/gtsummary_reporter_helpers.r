@@ -302,12 +302,20 @@ compute_max_table_height <- function(paper_size, orientation, units, margins) {
 #'
 #' Returns `NULL` when the page is infinite or has no rows.
 #'
+#' @param lpi Fixed lines-per-inch (e.g. `6L` for TXT/Courier). When supplied,
+#'   `font_size` is ignored.  When `NULL`, line height is derived from
+#'   `font_size` via the standard `(pt * 1.2) / 72` formula.
 #' @noRd
-estimate_rows_per_page <- function(row_count, font_size, paper_size, orientation, units, margins) {
+estimate_rows_per_page <- function(row_count, font_size = NULL, paper_size,
+                                   orientation, units, margins, lpi = NULL) {
   height <- compute_max_table_height(paper_size, orientation, units, margins)
   if (!is.finite(height) || height <= 0 || row_count <= 0) return(NULL)
 
-  line_height <- (as.numeric(font_size) * 1.2) / 72
+  if (!is.null(lpi)) {
+    line_height <- 1 / as.numeric(lpi)
+  } else {
+    line_height <- (as.numeric(font_size) * 1.2) / 72
+  }
   if (tolower(units) == "cm") line_height <- line_height * 2.54
 
   reserve_lines   <- 4
@@ -332,24 +340,17 @@ wrap_with_indent <- function(txt, max_chars) {
   if (is.na(txt) || !nzchar(trimws(txt))) return(txt)
   if (nchar(txt) <= max_chars)            return(txt)
 
-  indent_prefix <- regmatches(txt, regexpr("^\\s*", txt))
-  body_text     <- substring(txt, nchar(indent_prefix) + 1L)
-  words         <- strsplit(body_text, "\\s+")[[1L]]
-  words         <- words[nzchar(words)]
-  if (length(words) == 0L) return(txt)
+  indent_chars <- nchar(regmatches(txt, regexpr("^\\s*", txt)))
+  body_text    <- substring(txt, indent_chars + 1L)
+  if (!nzchar(body_text)) return(txt)
 
-  current   <- paste0(indent_prefix, words[1L])
-  out_lines <- character(0L)
-  for (w in words[-1L]) {
-    candidate <- paste0(current, " ", w)
-    if (nchar(candidate) <= max_chars) {
-      current <- candidate
-    } else {
-      out_lines <- c(out_lines, current)
-      current   <- paste0(indent_prefix, w)
-    }
-  }
-  paste(c(out_lines, current), collapse = "\n")
+  lines <- stringi::stri_wrap(body_text,
+                               width           = max_chars,
+                               indent          = indent_chars,
+                               exdent          = indent_chars,
+                               whitespace_only = TRUE,
+                               simplify        = TRUE)
+  paste(lines, collapse = "\n")
 }
 
 
@@ -397,7 +398,76 @@ normalize_spanning_headers <- function(x) {
   NULL
 }
 
-#' Resolve a `from`/`to` spanning-header endpoint to a column name
+#' Convert a gtsummary `table_styling$spanning_header` tibble to the
+#' `from` / `to` / `label` data frame expected by [apply_spanning_headers()]
+#'
+#' gtsummary stores one row per column (fields: `column`, `spanning_header`,
+#' `level`, `remove`).  This function collapses consecutive columns that share
+#' the same header into a single `from`/`to`/`label` row.
+#'
+#' @param gts_span  The `table_styling$spanning_header` tibble from a gtsummary
+#'   object, or `NULL`.
+#' @param ordered_cols  Character vector of column names in display order
+#'   (i.e. `names(processed_df)`).
+#' @noRd
+convert_gts_spanning_header <- function(gts_span, ordered_cols) {
+  if (is.null(gts_span) || !is.data.frame(gts_span))              return(NULL)
+  if (!all(c("column", "spanning_header") %in% names(gts_span)))  return(NULL)
+
+  # When multiple modify_spanning_header() calls exist, keep only the
+  # highest level (most recent) entry per column.
+  if ("level" %in% names(gts_span) && nrow(gts_span) > 0) {
+    gts_span <- gts_span[order(gts_span$level), , drop = FALSE]
+    gts_span <- gts_span[!duplicated(gts_span$column, fromLast = TRUE), , drop = FALSE]
+  }
+
+  # Drop explicitly removed rows and blank / NA headers
+  if ("remove" %in% names(gts_span)) {
+    gts_span <- gts_span[!gts_span$remove, , drop = FALSE]
+  }
+  gts_span <- gts_span[
+    !is.na(gts_span$spanning_header) & nzchar(gts_span$spanning_header),
+    , drop = FALSE
+  ]
+  if (nrow(gts_span) == 0) return(NULL)
+
+  # Map column names to positions in ordered_cols; drop unknowns
+  positions <- match(gts_span$column, ordered_cols)
+  valid     <- !is.na(positions)
+  gts_span  <- gts_span[valid, , drop = FALSE]
+  positions <- positions[valid]
+  if (length(positions) == 0) return(NULL)
+
+  # Sort by display position so from <= to is guaranteed
+  ord       <- order(positions)
+  gts_span  <- gts_span[ord, , drop = FALSE]
+  positions <- positions[ord]
+
+  # Collapse runs of consecutive columns sharing the same header into one span
+  result <- list()
+  i      <- 1L
+  while (i <= nrow(gts_span)) {
+    hdr <- gts_span$spanning_header[i]
+    j   <- i
+    while (j < nrow(gts_span) &&
+           gts_span$spanning_header[j + 1L] == hdr &&
+           positions[j + 1L] == positions[j] + 1L) {
+      j <- j + 1L
+    }
+    result[[length(result) + 1L]] <- data.frame(
+      from  = ordered_cols[positions[i]],
+      to    = ordered_cols[positions[j]],
+      label = strip_md_bold(hdr),
+      stringsAsFactors = FALSE
+    )
+    i <- j + 1L
+  }
+
+  if (length(result) == 0) return(NULL)
+  do.call(rbind, result)
+}
+
+
 #'
 #' @param x    Numeric index or column-name string.
 #' @param cols Character vector of ordered column names.
