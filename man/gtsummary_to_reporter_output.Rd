@@ -22,6 +22,7 @@ gtsummary_to_reporter_output(
   save_rds = TRUE,
   rds_dir = "rds",
   rows_per_page = NULL,
+  max_chars_per_line = NULL,
   debug_indent = FALSE,
   debug_spanning = FALSE,
   group_columns = NULL,
@@ -35,14 +36,38 @@ a plain \code{data.frame} to export.}
 \item{file_path}{Output path. The extension is ignored and output files are
 written according to \code{output_types}.}
 
-\item{max_table_width}{Maximum total table width. If \code{NULL}, derived from
-\code{report_paper_size}, \code{report_orientation}, \code{report_units}, and
-\code{report_margins}.}
+\item{max_table_width}{Maximum total table width in \code{report_units}. If
+\code{NULL}, uses the largest printable width for the current page setup. The
+largest effective value is \code{page_width - left_margin - right_margin};
+values above that are capped automatically. With the defaults
+(\code{report_paper_size = "letter"}, \code{report_orientation = "landscape"},
+\code{report_units = "inches"}, and default 1-inch left/right margins), the
+maximum effective value is \code{9}. For common defaults in inches: letter
+landscape = \code{9}, letter portrait = \code{6.5}, A4 landscape = \code{9.69},
+A4 portrait = \code{6.27}, legal landscape = \code{12}, legal portrait =
+\code{6.5}. The same defaults in centimeters are: letter landscape =
+\code{22.86}, letter portrait = \code{16.51}, A4 landscape = \code{24.61}, A4
+portrait = \code{15.93}, legal landscape = \code{30.48}, legal portrait =
+\code{16.51}. \code{report_paper_size = "none"} gives an infinite page width.
+If margins exceed the physical page width, the effective width is \code{0}. Use
+\code{NULL} unless you intentionally want a narrower table.}
 
-\item{min_col_width}{Minimum width allowed for any column.}
+\item{min_col_width}{Minimum width allowed for any column, in
+\code{report_units}.}
 
-\item{column_widths}{Optional manual column widths, either numeric vector or
-a \code{"|"}-delimited string (e.g. \code{"10|5|5"}).}
+\item{column_widths}{Optional manual column widths in \code{report_units},
+either a numeric vector or a \code{"|"}-delimited string. Values are applied in
+display column order, usually the \code{label} column first, followed by
+statistic or data columns. For example, on the default 9-inch usable width, a
+4-column table could use \code{"3|2|2|2"}; a 5-column table could use
+\code{"3|1.5|1.5|1.5|1.5"}. The practical total range is from
+\code{n_cols * min_col_width} up to the effective \code{max_table_width}; if
+the supplied total is larger, widths are scaled down to fit while respecting
+\code{min_col_width} where possible. If \code{n_cols * min_col_width} is wider
+than the effective page width, the per-column floor is relaxed to
+\code{effective_width / n_cols}. If fewer widths than columns are supplied, the
+last width is repeated; if more are supplied, extras are ignored. Use
+\code{NULL} unless you need precise control over column allocation.}
 
 \item{column_labels}{Optional column header overrides, as a named vector/list
 or a data frame with \code{column} and \code{label}.}
@@ -75,6 +100,12 @@ object (if available) as \code{.rds} files.}
 \item{rows_per_page}{Optional maximum number of table rows per page. If
 \code{NULL}, estimated from page geometry and \code{report_font_size}.}
 
+\item{max_chars_per_line}{Optional integer. Constrains the total table width so
+that at most this many characters fit across one TXT line (Courier at 12 CPI).
+Applied after \code{max_table_width}, so the stricter limit wins. Useful when
+the character budget is known (e.g. \code{max_chars_per_line = 132} for a
+132-column terminal or legacy print file).}
+
 \item{debug_indent}{Logical; print indentation diagnostics.}
 
 \item{debug_spanning}{Logical; print spanning-header diagnostics.}
@@ -96,6 +127,19 @@ pagination, indentation handling, and optional export of intermediate data.
 
 Environment variables are automatically consumed when available:
 \code{title1}-\code{title9}, \code{footnote1}-\code{footnote9}, and \code{progname}.
+}
+\details{
+Widths are resolved in this order:
+\enumerate{
+\item Compute the usable page width as
+\code{page_width - left_margin - right_margin}.
+\item Cap \code{max_table_width} at that usable width; \code{NULL} means use
+the full usable width.
+\item Apply \code{max_chars_per_line} as an additional TXT character-budget cap
+(\code{max_chars_per_line / 12} inches), when supplied.
+\item Apply automatic or manual \code{column_widths}, then scale columns down
+to the effective table width when needed.
+}
 }
 \examples{
 \dontshow{if (requireNamespace("reporter", quietly = TRUE)) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}

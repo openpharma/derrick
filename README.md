@@ -31,3 +31,37 @@
 [![Version check](https://github.com/openpharma/crane.reporter/actions/workflows/version.yaml/badge.svg)](https://github.com/openpharma/crane.reporter/actions/workflows/version.yaml)
 [![gitleaks](https://github.com/openpharma/crane.reporter/actions/workflows/gitleaks.yaml/badge.svg)](https://github.com/openpharma/crane.reporter/actions/workflows/gitleaks.yaml)
 
+## Width parameters
+
+`gtsummary_to_reporter_output()` interprets `max_table_width`,
+`min_col_width`, and `column_widths` in `report_units`. The effective page width
+is:
+
+```r
+page_width - left_margin - right_margin
+```
+
+`max_table_width = NULL` uses the full effective page width. A supplied
+`max_table_width` is capped at that value, and `max_chars_per_line` can make it
+narrower for TXT output (`max_chars_per_line / 12` inches).
+
+With default margins, the common effective page widths are:
+
+| `report_paper_size` | `report_orientation` | inches | cm |
+| --- | --- | ---: | ---: |
+| `"letter"` | `"landscape"` | 9.00 | 22.86 |
+| `"letter"` | `"portrait"` | 6.50 | 16.51 |
+| `"legal"` | `"landscape"` | 12.00 | 30.48 |
+| `"legal"` | `"portrait"` | 6.50 | 16.51 |
+| `"a4"` / `"rd4"` | `"landscape"` | 9.69 | 24.61 |
+| `"a4"` / `"rd4"` | `"portrait"` | 6.27 | 15.93 |
+
+Manual `column_widths` are applied in display-column order, usually `label`
+first and then statistic columns. Their practical total range is
+`n_cols * min_col_width` through the effective `max_table_width`; larger totals
+are scaled down. If `n_cols * min_col_width` is wider than the page, the
+per-column floor is relaxed to `effective_width / n_cols`.
+
+For the default 9-inch landscape letter page, use values such as `"3|2|2|2"`
+for a 4-column table or `"3|1.5|1.5|1.5|1.5"` for a 5-column table.
+

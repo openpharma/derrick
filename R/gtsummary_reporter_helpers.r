@@ -307,7 +307,8 @@ compute_max_table_height <- function(paper_size, orientation, units, margins) {
 #'   `font_size` via the standard `(pt * 1.2) / 72` formula.
 #' @noRd
 estimate_rows_per_page <- function(row_count, font_size = NULL, paper_size,
-                                   orientation, units, margins, lpi = NULL) {
+                                   orientation, units, margins, lpi = NULL,
+                                   reserve_lines = 4L, header_lines = 2L) {
   height <- compute_max_table_height(paper_size, orientation, units, margins)
   if (!is.finite(height) || height <= 0 || row_count <= 0) return(NULL)
 
@@ -318,8 +319,10 @@ estimate_rows_per_page <- function(row_count, font_size = NULL, paper_size,
   }
   if (tolower(units) == "cm") line_height <- line_height * 2.54
 
-  reserve_lines   <- 4
-  header_lines    <- 2
+  reserve_lines   <- as.numeric(reserve_lines)
+  header_lines    <- as.numeric(header_lines)
+  if (!is.finite(reserve_lines) || reserve_lines < 0) reserve_lines <- 4
+  if (!is.finite(header_lines)  || header_lines  < 0) header_lines  <- 2
   available_lines <- floor((height / line_height) - reserve_lines - header_lines)
   if (!is.finite(available_lines) || available_lines <= 0) return(NULL)
   min(row_count, available_lines)
@@ -351,6 +354,58 @@ wrap_with_indent <- function(txt, max_chars) {
                                whitespace_only = TRUE,
                                simplify        = TRUE)
   paste(lines, collapse = "\n")
+}
+
+#' Wrap report title or footnote lines to a fixed character budget
+#'
+#' Each input element may expand to multiple output elements. Existing newline
+#' breaks are honoured before wrapping each physical line.
+#'
+#' @param x         Character vector of title or footnote lines.
+#' @param max_chars Maximum characters per output line.
+#' @noRd
+wrap_report_lines <- function(x, max_chars) {
+  if (is.null(x) || length(x) == 0) return(x)
+  if (!is.finite(max_chars)) return(as.character(x))
+  max_chars <- as.integer(max_chars)
+  if (!is.finite(max_chars) || max_chars < 1L) return(as.character(x))
+
+  pieces <- unlist(strsplit(as.character(x), "\n", fixed = TRUE), use.names = FALSE)
+  if (length(pieces) == 0) return(character(0))
+
+  wrapped <- vapply(
+    pieces,
+    wrap_with_indent,
+    character(1L),
+    max_chars = max_chars,
+    USE.NAMES = FALSE
+  )
+  unlist(strsplit(wrapped, "\n", fixed = TRUE), use.names = FALSE)
+}
+
+#' Estimate the title/footnote character budget from page geometry
+#'
+#' @param width       Usable page width in `units`.
+#' @param units       `"inches"` or `"cm"`.
+#' @param font_size   Courier font size in points.
+#' @param output_types Output formats requested.
+#' @noRd
+compute_report_line_chars <- function(width, units, font_size, output_types) {
+  if (!is.finite(width) || width <= 0) return(Inf)
+  width_in <- if (tolower(units) == "cm") width / 2.54 else width
+  out_upper <- toupper(output_types)
+
+  cpi_candidates <- numeric(0)
+  if ("TXT" %in% out_upper) cpi_candidates <- c(cpi_candidates, 12)
+  if ("RTF" %in% out_upper) {
+    font_size <- as.numeric(font_size)
+    if (is.finite(font_size) && font_size > 0) {
+      cpi_candidates <- c(cpi_candidates, 120 / font_size)
+    }
+  }
+  if (length(cpi_candidates) == 0) cpi_candidates <- 12
+
+  max(1L, floor(width_in * min(cpi_candidates)))
 }
 
 

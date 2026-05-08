@@ -9,9 +9,23 @@
 # Function arguments (gtsummary_to_reporter_output):
 # - gts_obj: gtsummary object or plain data.frame to export
 # - file_path: output path (extension determines RTF/TXT names)
-# - max_table_width: max width (inches/cm) for all columns combined
+# - max_table_width: max width (inches/cm) for all columns combined. The largest
+#   effective value is the printable page width after subtracting left/right
+#   margins; larger values are automatically capped. With defaults
+#   (letter + landscape + inches + 1-inch left/right margins), this is 9.
+#   Common default maxima are: letter landscape 9 in / 22.86 cm, letter
+#   portrait 6.5 in / 16.51 cm, legal landscape 12 in / 30.48 cm, legal
+#   portrait 6.5 in / 16.51 cm, A4/RD4 landscape 9.69 in / 24.61 cm, and
+#   A4/RD4 portrait 6.27 in / 15.93 cm.
 # - min_col_width: minimum width for any column
-# - column_widths: manual widths (e.g., "10|5|5") or numeric vector
+# - column_widths: manual widths in display-column order (usually label first,
+#   then statistic columns), e.g. "3|2|2|2" for a 4-column table on the default
+#   9-inch usable width. Values are in report_units; their sum should generally
+#   be <= max_table_width's effective value. If they exceed it, widths are
+#   scaled down. If fewer values are supplied, the last value is repeated; extra
+#   values are ignored. Values below min_col_width are raised when possible; if
+#   n_cols * min_col_width is wider than the effective page width, the floor is
+#   relaxed to effective_width / n_cols. Use NULL for automatic widths.
 # - column_labels: override column header labels (named vector or data.frame)
 # - spanning_headers: spanning header specs (data.frame or list)
 # - report_orientation: "landscape" or "portrait"
@@ -41,7 +55,7 @@
 # gtsummary_to_reporter_output(
 #   gts_obj = my_gts_table,
 #   file_path = "Clinical_Trial_Output.rtf",
-#   column_widths = "10|5|5",
+#   column_widths = "3|2|2",
 #   column_labels = c(label = "Visit / Statistic", stat_1 = "PBO", stat_2 = "TRT"),
 #   spanning_headers = data.frame(from = 2, to = 3, label = "Treatment Group")
 # )
@@ -57,16 +71,51 @@
 #' Environment variables are automatically consumed when available:
 #' `title1`-`title9`, `footnote1`-`footnote9`, and `progname`.
 #'
+#' @details
+#' Widths are resolved in this order:
+#'
+#' 1. Compute the usable page width as
+#'    `page_width - left_margin - right_margin`.
+#' 2. Cap `max_table_width` at that usable width; `NULL` means use the full
+#'    usable width.
+#' 3. Apply `max_chars_per_line` as an additional TXT character-budget cap
+#'    (`max_chars_per_line / 12` inches), when supplied.
+#' 4. Apply automatic or manual `column_widths`, then scale columns down to the
+#'    effective table width when needed.
+#'
 #' @param gts_obj A `gtsummary` object (with `table_body`/`table_styling`) or
 #'   a plain `data.frame` to export.
 #' @param file_path Output path. The extension is ignored and output files are
 #'   written according to `output_types`.
 #' @param max_table_width Maximum total table width in `report_units`. If
-#'   `NULL`, derived from page geometry. Always capped at the page usable width
-#'   (paper minus margins) to prevent table overflow.
+#'   `NULL`, uses the largest printable width for the current page setup. The
+#'   largest effective value is:
+#'   `page_width - left_margin - right_margin`; values above that are capped
+#'   automatically. With the defaults (`report_paper_size = "letter"`,
+#'   `report_orientation = "landscape"`, `report_units = "inches"`, and
+#'   default 1-inch left/right margins), the maximum effective value is `9`.
+#'   For common defaults in inches: letter landscape = `9`, letter portrait =
+#'   `6.5`, A4 landscape = `9.69`, A4 portrait = `6.27`, legal landscape =
+#'   `12`, legal portrait = `6.5`. The same defaults in centimeters are:
+#'   letter landscape = `22.86`, letter portrait = `16.51`, A4 landscape =
+#'   `24.61`, A4 portrait = `15.93`, legal landscape = `30.48`, legal portrait =
+#'   `16.51`. `report_paper_size = "none"` gives an infinite page width. If
+#'   margins exceed the physical page width, the effective width is `0`. Use
+#'   `NULL` unless you intentionally want a narrower table.
 #' @param min_col_width Minimum width allowed for any column, in `report_units`.
 #' @param column_widths Optional manual column widths in `report_units`, either
-#'   a numeric vector or a `"|"`-delimited string (e.g. `"10|5|5"`).
+#'   a numeric vector or a `"|"`-delimited string. Values are applied in display
+#'   column order, usually the `label` column first, followed by statistic or
+#'   data columns. For example, on the default 9-inch usable width, a 4-column
+#'   table could use `"3|2|2|2"`; a 5-column table could use `"3|1.5|1.5|1.5|1.5"`.
+#'   The practical total range is from `n_cols * min_col_width` up to the
+#'   effective `max_table_width`; if the supplied total is larger, widths are
+#'   scaled down to fit while respecting `min_col_width` where possible. If
+#'   `n_cols * min_col_width` is wider than the effective page width, the
+#'   per-column floor is relaxed to `effective_width / n_cols`. If fewer widths
+#'   than columns are supplied, the last width is repeated; if more are supplied,
+#'   extras are ignored. Use `NULL` unless you need precise control over column
+#'   allocation.
 #' @param max_chars_per_line Optional integer. Constrains the total table width
 #'   so that at most this many characters fit across one TXT line (Courier at
 #'   12 CPI). Applied after `max_table_width`, so the stricter limit wins.
@@ -384,9 +433,9 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
   # calc_col_width always works in inches; convert to report_units if needed
   if (tolower(report_units) == "cm") col_widths <- col_widths * 2.54
 
-  # Track whether the user explicitly constrained the table width.  When TRUE,
-  # the label column is expanded to fill any slack so the table reaches the
-  # requested width (useful for giving footnotes more horizontal room).
+  # Track whether the user explicitly constrained the table width. When TRUE,
+  # slack is distributed proportionally so the table reaches the requested
+  # width without squeezing statistic columns.
   user_constrained_width <- !is.null(max_table_width) || !is.null(max_chars_per_line)
 
   # Resolve max_table_width: always cap at the page usable width so reporter
@@ -405,10 +454,32 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
 
   if (!is.null(max_chars_per_line)) {
     # TXT Courier uses exactly 12 CPI; convert character budget to physical width
-    chars_width_in <- as.numeric(max_chars_per_line) / 12
-    chars_width    <- if (tolower(report_units) == "cm") chars_width_in * 2.54 else chars_width_in
-    max_table_width <- min(max_table_width, chars_width)
+    max_chars_per_line_num <- suppressWarnings(as.numeric(max_chars_per_line))
+    if (is.finite(max_chars_per_line_num) && max_chars_per_line_num > 0) {
+      chars_width_in <- max_chars_per_line_num / 12
+      chars_width    <- if (tolower(report_units) == "cm") chars_width_in * 2.54 else chars_width_in
+      max_table_width <- min(max_table_width, chars_width)
+    }
   }
+
+  max_report_line_chars <- compute_report_line_chars(
+    width        = page_max,
+    units        = report_units,
+    font_size    = report_font_size,
+    output_types = output_types
+  )
+  if (!is.null(max_chars_per_line)) {
+    max_chars_per_line_num <- suppressWarnings(as.numeric(max_chars_per_line))
+    if (is.finite(max_chars_per_line_num) && max_chars_per_line_num > 0) {
+      max_report_line_chars <- min(
+        max_report_line_chars,
+        as.integer(max_chars_per_line_num)
+      )
+    }
+  }
+  title         <- wrap_report_lines(title, max_report_line_chars)
+  footnotes_vec <- wrap_report_lines(footnotes_vec, max_report_line_chars)
+  metadata_reserve_lines <- max(4L, length(title) + length(footnotes_vec) + 2L)
 
   manual_widths <- parse_column_widths(column_widths, n_cols = length(col_widths))
   if (!is.null(manual_widths)) {
@@ -436,9 +507,15 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
       if (total_other > remaining && total_other > 0) {
         other_widths <- other_widths * (remaining / total_other)
       } else if (user_constrained_width) {
-        # User explicitly asked for a specific width: expand label to fill slack
-        slack       <- max_table_width - label_width - sum(other_widths)
-        label_width <- label_width + max(0, slack)
+        # User explicitly asked for a specific width: distribute the extra space
+        # proportionally across all columns (label and stats) based on their
+        # auto-computed targets, alleviating squeezed stat columns.
+        total_auto <- label_width + sum(other_widths)
+        if (total_auto < max_table_width && total_auto > 0) {
+          scale        <- max_table_width / total_auto
+          label_width  <- label_width * scale
+          other_widths <- other_widths * scale
+        }
       }
 
       col_widths <- c(label = label_width, other_widths)
@@ -521,7 +598,8 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
       paper_size  = report_paper_size,
       orientation = report_orientation,
       units       = report_units,
-      margins     = report_margins
+      margins     = report_margins,
+      reserve_lines = metadata_reserve_lines
     )
     out_upper     <- toupper(output_types)
     rpp_candidates <- c(

@@ -132,6 +132,27 @@ test_that("adjust_col_widths handles non-finite values", {
   expect_true(all(is.finite(res)))
 })
 
+test_that("adjust_col_widths relaxes min_width when the page is too narrow", {
+  w   <- c(a = 1, b = 1, c = 1, d = 1)
+  res <- crane.reporter:::adjust_col_widths(w, max_total = 2, min_width = 0.6)
+  expect_equal(sum(res), 2, tolerance = 1e-9)
+  expect_equal(unname(res), rep(0.5, 4), tolerance = 1e-9)
+})
+
+test_that("manual column widths are scaled to the effective page width", {
+  manual   <- crane.reporter:::parse_column_widths("10|5|5", n_cols = 3)
+  page_max <- crane.reporter:::compute_max_table_width(
+    "letter", "landscape", "inches", NULL
+  )
+  res <- crane.reporter:::adjust_col_widths(
+    manual, max_total = page_max, min_width = 0.6
+  )
+  expect_equal(page_max, 9)
+  expect_lte(sum(res), page_max + 1e-9)
+  expect_true(all(res >= 0.6))
+  expect_true(all(res < manual))
+})
+
 # ---------------------------------------------------------------------------
 # label-first width logic (inline in gtsummary_to_reporter_output) —
 # tested here via the helper primitives it composes
@@ -153,8 +174,12 @@ label_first <- function(col_widths, max_table_width,
   if (total_other > remaining && total_other > 0) {
     other_widths <- other_widths * (remaining / total_other)
   } else if (user_constrained) {
-    slack       <- max_table_width - label_width - sum(other_widths)
-    label_width <- label_width + max(0, slack)
+    total_auto <- label_width + sum(other_widths)
+    if (total_auto < max_table_width && total_auto > 0) {
+      scale        <- max_table_width / total_auto
+      label_width  <- label_width * scale
+      other_widths <- other_widths * scale
+    }
   }
   c(label = label_width, other_widths)
 }
@@ -163,23 +188,31 @@ label_first <- function(col_widths, max_table_width,
 test_that("label-first: no expansion when width not user-constrained", {
   cw  <- c(label = 0.875, s1 = 1.375, s2 = 1.375, s3 = 2.125)
   res <- label_first(cw, max_table_width = 9, user_constrained = FALSE)
-  expect_equal(sum(res), sum(cw))           # unchanged
+  expect_equal(sum(res), sum(cw))            # unchanged
   expect_equal(res[["label"]], cw[["label"]])
 })
 
-# user sets max_table_width = 9 → label expands to fill the 3.25-inch slack
-test_that("label-first: label expands to fill user-constrained width", {
+# user sets max_table_width = 9 → all columns expand proportionally
+test_that("label-first: all columns expand proportionally to fill user-constrained width", {
   cw  <- c(label = 0.875, s1 = 1.375, s2 = 1.375, s3 = 2.125)
   res <- label_first(cw, max_table_width = 9, user_constrained = TRUE)
   expect_equal(sum(res), 9, tolerance = 1e-9)
-  expect_gt(res[["label"]], cw[["label"]])  # label got wider
+  # every column should be wider than the auto value
+  expect_gt(res[["label"]], cw[["label"]])
+  expect_gt(res[["s1"]],    cw[["s1"]])
+  expect_gt(res[["s3"]],    cw[["s3"]])
+  # relative widths preserved: s1 == s2, s3 > s1
+  expect_equal(res[["s1"]], res[["s2"]], tolerance = 1e-9)
+  expect_gt(res[["s3"]], res[["s1"]])
 })
 
 # user sets max_table_width = 7 (between auto-sum and page)
-test_that("label-first: label expands to exactly max_table_width = 7", {
+test_that("label-first: all columns scale to exactly max_table_width = 7", {
   cw  <- c(label = 0.875, s1 = 1.375, s2 = 1.375, s3 = 2.125)
   res <- label_first(cw, max_table_width = 7, user_constrained = TRUE)
   expect_equal(sum(res), 7, tolerance = 1e-9)
+  scale <- 7 / sum(cw)
+  expect_equal(res[["s1"]], cw[["s1"]] * scale, tolerance = 1e-9)
 })
 
 # user sets max_table_width < auto-sum → shrink path, user_constrained has no effect
@@ -191,8 +224,12 @@ test_that("label-first: shrinks when auto-sum exceeds max_table_width", {
 })
 
 
+test_that("get_paper_dims returns named paper dimensions in inches", {
   dims <- crane.reporter:::get_paper_dims("letter", "inches")
   expect_equal(dims, c(8.5, 11))
+  expect_equal(crane.reporter:::get_paper_dims("legal", "inches"), c(8.5, 14))
+  expect_equal(crane.reporter:::get_paper_dims("a4", "inches"), c(8.27, 11.69))
+  expect_equal(crane.reporter:::get_paper_dims("rd4", "inches"), c(8.27, 11.69))
 })
 
 test_that("get_paper_dims converts to cm", {
@@ -243,10 +280,28 @@ test_that("normalize_margins merges a partial list with defaults", {
 })
 
 # ---------------------------------------------------------------------------
-test_that("compute_max_table_width is positive for letter landscape", {
-  w <- crane.reporter:::compute_max_table_width("letter", "landscape", "inches", NULL)
-  # letter landscape: 11 inches wide, minus default margins 1+1 = 9
-  expect_equal(w, 9)
+test_that("compute_max_table_width covers default page width ranges in inches", {
+  cases <- data.frame(
+    paper = c("letter", "letter", "legal", "legal", "a4", "a4", "rd4", "rd4"),
+    orientation = c(
+      "landscape", "portrait", "landscape", "portrait",
+      "landscape", "portrait", "landscape", "portrait"
+    ),
+    expected = c(9, 6.5, 12, 6.5, 9.69, 6.27, 9.69, 6.27),
+    stringsAsFactors = FALSE
+  )
+
+  for (i in seq_len(nrow(cases))) {
+    w <- crane.reporter:::compute_max_table_width(
+      cases$paper[[i]], cases$orientation[[i]], "inches", NULL
+    )
+    expect_equal(
+      w,
+      cases$expected[[i]],
+      tolerance = 1e-9,
+      info = paste(cases$paper[[i]], cases$orientation[[i]])
+    )
+  }
 })
 
 test_that("compute_max_table_height is positive for letter portrait", {
@@ -260,10 +315,54 @@ test_that("compute_max_table_width returns Inf for paper_size='none'", {
   expect_true(is.infinite(w))
 })
 
-test_that("compute_max_table_width returns cm value 2.54x inches value", {
-  w_in <- crane.reporter:::compute_max_table_width("letter", "landscape", "inches", NULL)
-  w_cm <- crane.reporter:::compute_max_table_width("letter", "landscape", "cm", NULL)
-  expect_equal(w_cm, w_in * 2.54)
+test_that("compute_max_table_width returns cm values 2.54x inch ranges", {
+  cases <- expand.grid(
+    paper = c("letter", "legal", "a4"),
+    orientation = c("landscape", "portrait"),
+    stringsAsFactors = FALSE
+  )
+
+  for (i in seq_len(nrow(cases))) {
+    w_in <- crane.reporter:::compute_max_table_width(
+      cases$paper[[i]], cases$orientation[[i]], "inches", NULL
+    )
+    w_cm <- crane.reporter:::compute_max_table_width(
+      cases$paper[[i]], cases$orientation[[i]], "cm", NULL
+    )
+    expect_equal(
+      w_cm,
+      w_in * 2.54,
+      tolerance = 1e-9,
+      info = paste(cases$paper[[i]], cases$orientation[[i]])
+    )
+  }
+})
+
+test_that("compute_max_table_width respects custom margins and numeric pages", {
+  w <- crane.reporter:::compute_max_table_width(
+    "letter", "landscape", "inches",
+    c(top = 0.5, right = 0.75, bottom = 0.5, left = 0.75)
+  )
+  expect_equal(w, 9.5)
+
+  portrait <- crane.reporter:::compute_max_table_width(
+    c(8, 10), "portrait", "inches",
+    list(left = 0.25, right = 0.75)
+  )
+  landscape <- crane.reporter:::compute_max_table_width(
+    c(8, 10), "landscape", "inches",
+    list(left = 0.25, right = 0.75)
+  )
+  expect_equal(portrait, 7)
+  expect_equal(landscape, 9)
+})
+
+test_that("compute_max_table_width bottoms out at zero when margins exceed page width", {
+  w <- crane.reporter:::compute_max_table_width(
+    "letter", "portrait", "inches",
+    c(top = 0.5, right = 5, bottom = 0.5, left = 5)
+  )
+  expect_equal(w, 0)
 })
 
 # ---------------------------------------------------------------------------
@@ -320,6 +419,18 @@ test_that("estimate_rows_per_page: TXT at 6 LPI is stable regardless of font_siz
   expect_equal(rpp_9, rpp_14)
 })
 
+test_that("estimate_rows_per_page: extra reserved lines reduce data rows", {
+  rpp_default <- crane.reporter:::estimate_rows_per_page(
+    500, font_size = 9, paper_size = "letter", orientation = "landscape",
+    units = "inches", margins = NULL
+  )
+  rpp_reserved <- crane.reporter:::estimate_rows_per_page(
+    500, font_size = 9, paper_size = "letter", orientation = "landscape",
+    units = "inches", margins = NULL, reserve_lines = 12L
+  )
+  expect_true(rpp_reserved < rpp_default)
+})
+
 # ---------------------------------------------------------------------------
 # max_chars_per_line conversion (inline logic, no package needed)
 # ---------------------------------------------------------------------------
@@ -348,6 +459,7 @@ test_that("max_chars_per_line tighter than page_max wins", {
 })
 
 
+test_that("normalize_column_labels handles named vector input", {
   res <- crane.reporter:::normalize_column_labels(c(label = "Var", stat_1 = "PBO"))
   expect_equal(res, list(label = "Var", stat_1 = "PBO"))
 })
@@ -527,6 +639,36 @@ test_that("wrap_with_indent preserves indentation on continuation lines", {
 test_that("wrap_with_indent handles empty/whitespace-only strings", {
   expect_equal(crane.reporter:::wrap_with_indent("", 10),   "")
   expect_equal(crane.reporter:::wrap_with_indent("   ", 10), "   ")
+})
+
+test_that("wrap_report_lines expands long title and footnote lines", {
+  txt <- "This title line is too long for a narrow report page"
+  res <- crane.reporter:::wrap_report_lines(txt, 18)
+  expect_true(length(res) > 1)
+  expect_true(all(nchar(res) <= 18))
+})
+
+test_that("wrap_report_lines honours existing newline breaks", {
+  txt <- "Short line\nThis second line is too long"
+  res <- crane.reporter:::wrap_report_lines(txt, 12)
+  expect_equal(res[1], "Short line")
+  expect_true(length(res) > 2)
+  expect_true(all(nchar(res) <= 12))
+})
+
+test_that("compute_report_line_chars uses the strictest requested output", {
+  txt_chars <- crane.reporter:::compute_report_line_chars(
+    width = 9, units = "inches", font_size = 9, output_types = "TXT"
+  )
+  rtf_chars <- crane.reporter:::compute_report_line_chars(
+    width = 9, units = "inches", font_size = 9, output_types = "RTF"
+  )
+  both_chars <- crane.reporter:::compute_report_line_chars(
+    width = 9, units = "inches", font_size = 9, output_types = c("RTF", "TXT")
+  )
+  expect_equal(txt_chars, 108)
+  expect_gt(rtf_chars, txt_chars)
+  expect_equal(both_chars, txt_chars)
 })
 
 # ---------------------------------------------------------------------------
