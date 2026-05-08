@@ -131,7 +131,7 @@ on:
       install-deps-from-package-repositories:
         description: |
           Set this to a comma-separated named list of R packages repositories to use for installing dependencies.
-          Example: "R-universe=https://insightsengineering.r-universe.dev/,CRAN=https://cloud.r-project.org/"
+          Example: "R-universe=https://openpharma.r-universe.dev/,CRAN=https://cloud.r-project.org/"
           If the value is non-empty, it takes precedence over deps-installation-method.
         required: false
         type: string
@@ -152,28 +152,28 @@ on:
         default: ""
       skip-desc-branch:
         description: |
-          Passed to `insightsengineering/setup-r-dependencies`.
+          Passed to the R dependency setup action.
           Used only if deps-installation-method == 'setup-r-dependencies'.
         required: false
         type: boolean
         default: false
       skip-desc-dev:
         description: |
-          Passed to `insightsengineering/setup-r-dependencies`.
+          Passed to the R dependency setup action.
           Used only if deps-installation-method == 'setup-r-dependencies'.
         required: false
         type: boolean
         default: false
       repository-list:
         description: |
-          Passed to `insightsengineering/setup-r-dependencies`.
+          Passed to the R dependency setup action.
           Used only if deps-installation-method == 'setup-r-dependencies'.
         required: false
         type: string
         default: "PPM=PPM@latest"
       cache-version:
         description: |
-          Passed to `insightsengineering/setup-r-dependencies`.
+          Passed to the R dependency setup action.
           Used only if deps-installation-method == 'setup-r-dependencies'.
         required: false
         type: string
@@ -272,7 +272,7 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - image: ghcr.io/insightsengineering/rstudio
+          - image: ghcr.io/rocker-project/rstudio
             tag: latest
     name: ${{ matrix.config.image }}, version ${{ matrix.config.tag }}
     runs-on: ubuntu-latest

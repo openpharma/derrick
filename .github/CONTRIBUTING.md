@@ -130,7 +130,7 @@ The package maintainer also reserves the right to adjust the criteria to recogni
 If you have further questions regarding the contribution guidelines, please contact the package/repository maintainer.
 
 <!-- urls -->
-[docs]: https://insightsengineering.github.io/derrick/index.html
-[articles]: https://insightsengineering.github.io/derrick/main/articles/index.html
-[license]: https://insightsengineering.github.io/derrick/main/LICENSE-text.html
-[insights]: https://github.com/insightsengineering/derrick/pulse
+[docs]: https://openpharma.github.io/derrick/
+[articles]: https://openpharma.github.io/derrick/articles/index.html
+[license]: https://openpharma.github.io/derrick/LICENSE-text.html
+[insights]: https://github.com/openpharma/derrick/pulse

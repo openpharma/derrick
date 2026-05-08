@@ -14,22 +14,7 @@
 [![Current Version](https://img.shields.io/github/r-package/v/openpharma/derrick/main?color=purple\&label=package%20version)](https://github.com/openpharma/derrick/tree/main)
 [![Open Issues](https://img.shields.io/github/issues-raw/openpharma/derrick?color=red\&label=open%20issues)](https://github.com/openpharma/derrick/issues?q=is%3Aissue+is%3Aopen+sort%3Aupdated-desc)
 
-[![Audit Dependencies](https://github.com/openpharma/derrick/actions/workflows/audit.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/audit.yaml)
 [![BiocCheck](https://github.com/openpharma/derrick/actions/workflows/bioccheck.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/bioccheck.yaml)
-[![Check URLs](https://github.com/openpharma/derrick/actions/workflows/links.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/links.yaml)
-[![Coverage](https://github.com/openpharma/derrick/actions/workflows/test-coverage.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/test-coverage.yaml)
-[![License report](https://github.com/openpharma/derrick/actions/workflows/licenses.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/licenses.yaml)
-[![Pkgdown Docs](https://github.com/openpharma/derrick/actions/workflows/pkgdown.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/pkgdown.yaml)
-[![R CMD Check](https://github.com/openpharma/derrick/actions/workflows/build-check-install.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/build-check-install.yaml)
-[![R Package Validation report](https://github.com/openpharma/derrick/actions/workflows/validation.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/validation.yaml)
-[![Release](https://github.com/openpharma/derrick/actions/workflows/release.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/release.yaml)
-[![Roxygen](https://github.com/openpharma/derrick/actions/workflows/roxygen.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/roxygen.yaml)
-[![Spelling](https://github.com/openpharma/derrick/actions/workflows/spelling.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/spelling.yaml)
-[![Style](https://github.com/openpharma/derrick/actions/workflows/style.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/style.yaml)
-[![SuperLinter](https://github.com/openpharma/derrick/actions/workflows/linter.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/linter.yaml)
-[![Version bump](https://github.com/openpharma/derrick/actions/workflows/version-bump.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/version-bump.yaml)
-[![Version check](https://github.com/openpharma/derrick/actions/workflows/version.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/version.yaml)
-[![gitleaks](https://github.com/openpharma/derrick/actions/workflows/gitleaks.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/gitleaks.yaml)
 
 Convert `gtsummary` tables and plain data frames into clinical-style
 `reporter` RTF and TXT outputs.
@@ -77,4 +62,3 @@ By default, `rows_per_page = NULL` leaves pagination to `reporter`.
 format, fixed page metrics, and the actual wrapped title, header, row, and
 footnote line counts. Supply `rows_per_page` only when you want to force manual
 chunks before reporter's own pagination runs.
-

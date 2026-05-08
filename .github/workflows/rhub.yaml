@@ -16,7 +16,6 @@ on:
         description: "A comma separated list of R-hub platforms to use."
         type: string
         # These platforms correspond roughly to CRAN package checks.
-        # More information: https://github.com/insightsengineering/idr-tasks/issues/781
         # All supported R-hub platforms can be viewed by running: rhub::rhub_platforms()
         # Container-based platforms (as opposed to VM-based Windows and macOS platforms)
         # can be also viewed here: https://r-hub.github.io/containers/containers.html
