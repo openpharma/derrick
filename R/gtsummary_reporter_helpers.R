@@ -21,20 +21,13 @@ strip_md_bold <- function(x) {
   x_chr
 }
 
-#' Format a POSIXct timestamp as ISO-8601 UTC string
-#' @noRd
-format_iso8601_utc <- function(x) {
-  paste0(format(x, tz = "UTC", "%Y-%m-%dT%H:%M:%S"), " (UTC+0)")
-}
-
-
 # ---------------------------------------------------------------------------
 # Environment helpers
 # ---------------------------------------------------------------------------
 
 #' Collect sequentially-numbered environment variables into a character vector
 #'
-#' Looks for variables named `<prefix>1`, `<prefix>2`, … `<prefix><max_n>` in
+#' Looks for variables named `<prefix>1`, `<prefix>2`, ..., `<prefix><max_n>` in
 #' `env` (and its parents) and returns their non-missing, non-empty values.
 #'
 #' @param prefix Variable name prefix (e.g. `"title"`, `"footnote"`).
@@ -154,7 +147,7 @@ parse_column_widths <- function(widths, n_cols) {
   if (length(widths) == 0) return(NULL)
 
   if (length(widths) < n_cols) {
-    widths <- c(widths, rep(tail(widths, 1), n_cols - length(widths)))
+    widths <- c(widths, rep(utils::tail(widths, 1), n_cols - length(widths)))
   } else if (length(widths) > n_cols) {
     widths <- widths[seq_len(n_cols)]
   }
@@ -208,10 +201,6 @@ adjust_col_widths <- function(widths, max_total, min_width) {
 #' @noRd
 normalize_column_labels <- function(x) {
   if (is.null(x)) return(NULL)
-  if (is.character(x) || is.list(x)) {
-    if (is.null(names(x))) return(NULL)
-    return(as.list(x))
-  }
   if (is.data.frame(x)) {
     names(x) <- tolower(names(x))
     if (all(c("column", "label") %in% names(x))) {
@@ -219,6 +208,10 @@ normalize_column_labels <- function(x) {
       names(out) <- x$column
       return(out)
     }
+  }
+  if (is.character(x) || is.list(x)) {
+    if (is.null(names(x))) return(NULL)
+    return(as.list(x))
   }
   NULL
 }
@@ -228,26 +221,56 @@ normalize_column_labels <- function(x) {
 # Page geometry helpers
 # ---------------------------------------------------------------------------
 
+#' Normalize named paper sizes to the values accepted by reporter
+#'
+#' @param paper_size A string (`"letter"`, `"legal"`, `"A4"`, `"RD4"`,
+#'   `"none"`) or a numeric length-2 vector `c(width, height)`.
+#' @noRd
+normalize_reporter_paper_size <- function(paper_size) {
+  if (is.numeric(paper_size) && length(paper_size) == 2) return(as.numeric(paper_size))
+
+  size_key <- tolower(as.character(paper_size))
+  switch(
+    size_key,
+    "letter" = "letter",
+    "legal"  = "legal",
+    "a4"     = "A4",
+    "rd4"    = "RD4",
+    "none"   = "none",
+    as.character(paper_size)
+  )
+}
+
 #' Return the physical dimensions (width, height) of a named paper size
 #'
-#' @param paper_size A string (`"letter"`, `"legal"`, `"a4"`, `"rd4"`,
+#' @param paper_size A string (`"letter"`, `"legal"`, `"A4"`, `"RD4"`,
 #'   `"none"`) or a numeric length-2 vector `c(width, height)`.
 #' @param units      `"inches"` or `"cm"`.
 #' @noRd
 get_paper_dims <- function(paper_size, units) {
   if (is.numeric(paper_size) && length(paper_size) == 2) return(as.numeric(paper_size))
   size_key <- tolower(as.character(paper_size))
-  dims <- switch(
-    size_key,
-    "letter" = c(8.5,  11),
-    "legal"  = c(8.5,  14),
-    "a4"     = c(8.27, 11.69),
-    "rd4"    = c(8.27, 11.69),
-    "none"   = c(Inf,  Inf),
-    c(8.5, 11)
-  )
-  if (tolower(units) == "cm") dims <- dims * 2.54
-  dims
+  if (tolower(units) == "cm") {
+    switch(
+      size_key,
+      "letter" = c(21.59, 27.94),
+      "legal"  = c(21.59, 35.56),
+      "a4"     = c(21, 29.7),
+      "rd4"    = c(19.6, 27.3),
+      "none"   = c(Inf, Inf),
+      c(21.59, 27.94)
+    )
+  } else {
+    switch(
+      size_key,
+      "letter" = c(8.5, 11),
+      "legal"  = c(8.5, 14),
+      "a4"     = c(8.27, 11.69),
+      "rd4"    = c(7.7, 10.7),
+      "none"   = c(Inf, Inf),
+      c(8.5, 11)
+    )
+  }
 }
 
 #' Default page margins for a given unit system
@@ -261,7 +284,7 @@ get_default_margins <- function(units) {
 
 #' Normalise a margin specification to a named numeric vector
 #'
-#' Accepts `NULL` (→ defaults), a named/unnamed length-4 numeric vector, or a
+#' Accepts `NULL` (defaults), a named/unnamed length-4 numeric vector, or a
 #' named list. Partial lists are merged with defaults.
 #'
 #' @noRd
@@ -288,46 +311,6 @@ compute_max_table_width <- function(paper_size, orientation, units, margins) {
   margins <- normalize_margins(margins, units)
   max(0, dims[1] - margins["left"] - margins["right"])
 }
-
-#' Compute the maximum available table height after subtracting margins
-#' @noRd
-compute_max_table_height <- function(paper_size, orientation, units, margins) {
-  dims    <- get_paper_dims(paper_size, units)
-  if (tolower(orientation) == "landscape") dims <- rev(dims)
-  margins <- normalize_margins(margins, units)
-  max(0, dims[2] - margins["top"] - margins["bottom"])
-}
-
-#' Estimate the maximum number of data rows that fit on one page
-#'
-#' Returns `NULL` when the page is infinite or has no rows.
-#'
-#' @param lpi Fixed lines-per-inch (e.g. `6L` for TXT/Courier). When supplied,
-#'   `font_size` is ignored.  When `NULL`, line height is derived from
-#'   `font_size` via the standard `(pt * 1.2) / 72` formula.
-#' @noRd
-estimate_rows_per_page <- function(row_count, font_size = NULL, paper_size,
-                                   orientation, units, margins, lpi = NULL,
-                                   reserve_lines = 4L, header_lines = 2L) {
-  height <- compute_max_table_height(paper_size, orientation, units, margins)
-  if (!is.finite(height) || height <= 0 || row_count <= 0) return(NULL)
-
-  if (!is.null(lpi)) {
-    line_height <- 1 / as.numeric(lpi)
-  } else {
-    line_height <- (as.numeric(font_size) * 1.2) / 72
-  }
-  if (tolower(units) == "cm") line_height <- line_height * 2.54
-
-  reserve_lines   <- as.numeric(reserve_lines)
-  header_lines    <- as.numeric(header_lines)
-  if (!is.finite(reserve_lines) || reserve_lines < 0) reserve_lines <- 4
-  if (!is.finite(header_lines)  || header_lines  < 0) header_lines  <- 2
-  available_lines <- floor((height / line_height) - reserve_lines - header_lines)
-  if (!is.finite(available_lines) || available_lines <= 0) return(NULL)
-  min(row_count, available_lines)
-}
-
 
 # ---------------------------------------------------------------------------
 # Text wrapping
@@ -742,8 +725,8 @@ build_table_spec <- function(df, col_widths, col_map, cols_to_define, center_col
 #' @param footnotes_vec  Character vector of footnote strings.
 #'
 #' @return A named list with elements:
-#'   * `tbl`     – the (possibly modified) reporter table object.
-#'   * `applied` – `TRUE` if footnotes were successfully applied.
+#'   * `tbl` - the (possibly modified) reporter table object.
+#'   * `applied` - `TRUE` if footnotes were successfully applied.
 #' @noRd
 apply_tbl_footnotes <- function(tbl_obj, footnotes_vec) {
   if (length(footnotes_vec) == 0) return(list(tbl = tbl_obj, applied = FALSE))
