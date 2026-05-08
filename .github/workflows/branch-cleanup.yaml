@@ -21,7 +21,7 @@ jobs:
     name: Branch Cleanup 🍃
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/insightsengineering/rstudio:latest
+      image: ghcr.io/rocker-project/rstudio:latest
 
     steps:
       - name: Setup token 🔑

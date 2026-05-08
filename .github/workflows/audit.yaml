@@ -30,7 +30,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/insightsengineering/rstudio:latest
+      image: ghcr.io/rocker-project/rstudio:latest
     name: oysteR scan 🦪
     if: >
       !contains(github.event.commits[0].message, '[skip audit]')

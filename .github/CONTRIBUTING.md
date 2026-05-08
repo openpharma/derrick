@@ -130,7 +130,7 @@ The package maintainer also reserves the right to adjust the criteria to recogni
 If you have further questions regarding the contribution guidelines, please contact the package/repository maintainer.
 
 <!-- urls -->
-[docs]: https://insightsengineering.github.io/crane.reporter/index.html
-[articles]: https://insightsengineering.github.io/crane.reporter/main/articles/index.html
-[license]: https://insightsengineering.github.io/crane.reporter/main/LICENSE-text.html
-[insights]: https://github.com/insightsengineering/crane.reporter/pulse
+[docs]: https://openpharma.github.io/crane.reporter/
+[articles]: https://openpharma.github.io/crane.reporter/articles/index.html
+[license]: https://openpharma.github.io/crane.reporter/LICENSE-text.html
+[insights]: https://github.com/openpharma/crane.reporter/pulse

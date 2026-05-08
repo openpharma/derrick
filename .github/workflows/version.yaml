@@ -152,7 +152,7 @@ jobs:
                   print(f"Emoji: {emoji} | Line: {line_num} | Start: {start} | End: {end}")
           if matches:
               print("🚨 Emojis were found in the NEWS.md file! Please remove them 🙏")
-              print("ℹ️ Refer to https://github.com/insightsengineering/tern.gee/issues/37#issue-1714621201 for more information")
+              print("ℹ️ Emojis in NEWS.md can cause issues with CRAN submission and some R CMD check steps.")
               sys.exit(1)
           print("🥰 No emojis found in the NEWS.md, good to go!")
         shell: python

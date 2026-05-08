@@ -51,7 +51,7 @@ on:
         default: staged-dependencies
       lookup-refs:
         description: |
-          Passed to insightsengineering/setup-r-dependencies. See its documentation.
+          Passed to the R dependency setup action. See its documentation.
           Used only if deps-installation-method == 'setup-r-dependencies'.
         required: false
         type: string
@@ -74,7 +74,7 @@ jobs:
       !contains(github.event.commits[0].message, '[skip roxygen]')
         && github.event.pull_request.draft == false
     container:
-      image: ghcr.io/insightsengineering/rstudio:latest
+      image: ghcr.io/rocker-project/rstudio:latest
 
     steps:
       - name: Setup token 🔑
