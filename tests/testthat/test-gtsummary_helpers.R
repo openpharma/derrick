@@ -12,7 +12,7 @@ test_that("collect_env_lines picks up numbered variables", {
   e <- new.env(parent = emptyenv())
   e$title1 <- "First"
   e$title2 <- "Second"
-  e$title4 <- "Fourth"          # gap: title3 missing → stops at 4
+  e$title4 <- "Fourth"          # gap: title3 missing, stops at 4
 
   res <- derrick:::collect_env_lines("title", max_n = 9L, env = e)
   expect_equal(res, c("First", "Second", "Fourth"))
@@ -75,9 +75,9 @@ test_that("get_col_label returns default for empty label", {
 
 # ---------------------------------------------------------------------------
 test_that("calc_col_width respects min and max", {
-  # Very short content → min_width
+  # Very short content uses min_width
   expect_equal(derrick:::calc_col_width("a", min_width = 0.8, max_width = 3.5), 0.8)
-  # Very long content → max_width
+  # Very long content uses max_width
   long <- paste(rep("x", 200), collapse = "")
   expect_equal(derrick:::calc_col_width(long, min_width = 0.8, max_width = 3.5), 3.5)
 })
@@ -154,7 +154,7 @@ test_that("manual column widths are scaled to the effective page width", {
 })
 
 # ---------------------------------------------------------------------------
-# label-first width logic (inline in gtsummary_to_reporter_output) —
+# label-first width logic (inline in gtsummary_to_reporter_output):
 # tested here via the helper primitives it composes
 # ---------------------------------------------------------------------------
 
@@ -184,7 +184,7 @@ label_first <- function(col_widths, max_table_width,
   c(label = label_width, other_widths)
 }
 
-# auto-sum (5.75) < mtw (9): no constraint → no expansion
+# auto-sum (5.75) < mtw (9): no constraint, no expansion
 test_that("label-first: no expansion when width not user-constrained", {
   cw  <- c(label = 0.875, s1 = 1.375, s2 = 1.375, s3 = 2.125)
   res <- label_first(cw, max_table_width = 9, user_constrained = FALSE)
@@ -192,7 +192,7 @@ test_that("label-first: no expansion when width not user-constrained", {
   expect_equal(res[["label"]], cw[["label"]])
 })
 
-# user sets max_table_width = 9 → all columns expand proportionally
+# user sets max_table_width = 9: all columns expand proportionally
 test_that("label-first: all columns expand proportionally to fill user-constrained width", {
   cw  <- c(label = 0.875, s1 = 1.375, s2 = 1.375, s3 = 2.125)
   res <- label_first(cw, max_table_width = 9, user_constrained = TRUE)
@@ -215,7 +215,7 @@ test_that("label-first: all columns scale to exactly max_table_width = 7", {
   expect_equal(res[["s1"]], cw[["s1"]] * scale, tolerance = 1e-9)
 })
 
-# user sets max_table_width < auto-sum → shrink path, user_constrained has no effect
+# user sets max_table_width < auto-sum: shrink path, user_constrained has no effect
 test_that("label-first: shrinks when auto-sum exceeds max_table_width", {
   cw  <- c(label = 3.5, s1 = 3.5, s2 = 3.5)
   res <- label_first(cw, max_table_width = 7, user_constrained = TRUE)
@@ -224,18 +224,31 @@ test_that("label-first: shrinks when auto-sum exceeds max_table_width", {
 })
 
 
+test_that("normalize_reporter_paper_size accepts reporter aliases", {
+  expect_equal(derrick:::normalize_reporter_paper_size("letter"), "letter")
+  expect_equal(derrick:::normalize_reporter_paper_size("legal"), "legal")
+  expect_equal(derrick:::normalize_reporter_paper_size("a4"), "A4")
+  expect_equal(derrick:::normalize_reporter_paper_size("A4"), "A4")
+  expect_equal(derrick:::normalize_reporter_paper_size("rd4"), "RD4")
+  expect_equal(derrick:::normalize_reporter_paper_size("RD4"), "RD4")
+  expect_equal(derrick:::normalize_reporter_paper_size("none"), "none")
+  expect_equal(derrick:::normalize_reporter_paper_size(c(7, 10)), c(7, 10))
+})
+
 test_that("get_paper_dims returns named paper dimensions in inches", {
   dims <- derrick:::get_paper_dims("letter", "inches")
   expect_equal(dims, c(8.5, 11))
   expect_equal(derrick:::get_paper_dims("legal", "inches"), c(8.5, 14))
   expect_equal(derrick:::get_paper_dims("a4", "inches"), c(8.27, 11.69))
-  expect_equal(derrick:::get_paper_dims("rd4", "inches"), c(8.27, 11.69))
+  expect_equal(derrick:::get_paper_dims("rd4", "inches"), c(7.7, 10.7))
 })
 
 test_that("get_paper_dims converts to cm", {
   dims_in <- derrick:::get_paper_dims("letter", "inches")
   dims_cm <- derrick:::get_paper_dims("letter", "cm")
   expect_equal(dims_cm, dims_in * 2.54)
+  expect_equal(derrick:::get_paper_dims("A4", "cm"), c(21, 29.7))
+  expect_equal(derrick:::get_paper_dims("RD4", "cm"), c(19.6, 27.3))
 })
 
 test_that("get_paper_dims accepts numeric vector", {
@@ -282,12 +295,12 @@ test_that("normalize_margins merges a partial list with defaults", {
 # ---------------------------------------------------------------------------
 test_that("compute_max_table_width covers default page width ranges in inches", {
   cases <- data.frame(
-    paper = c("letter", "letter", "legal", "legal", "a4", "a4", "rd4", "rd4"),
+    paper = c("letter", "letter", "legal", "legal", "A4", "A4", "RD4", "RD4"),
     orientation = c(
       "landscape", "portrait", "landscape", "portrait",
       "landscape", "portrait", "landscape", "portrait"
     ),
-    expected = c(9, 6.5, 12, 6.5, 9.69, 6.27, 9.69, 6.27),
+    expected = c(9, 6.5, 12, 6.5, 9.69, 6.27, 8.7, 5.7),
     stringsAsFactors = FALSE
   )
 
@@ -304,34 +317,29 @@ test_that("compute_max_table_width covers default page width ranges in inches", 
   }
 })
 
-test_that("compute_max_table_height is positive for letter portrait", {
-  h <- derrick:::compute_max_table_height("letter", "portrait", "inches", NULL)
-  # letter portrait: 11 inches tall, minus default margins 0.5+0.5 = 10
-  expect_equal(h, 10)
-})
-
 test_that("compute_max_table_width returns Inf for paper_size='none'", {
   w <- derrick:::compute_max_table_width("none", "landscape", "inches", NULL)
   expect_true(is.infinite(w))
 })
 
-test_that("compute_max_table_width returns cm values 2.54x inch ranges", {
-  cases <- expand.grid(
-    paper = c("letter", "legal", "a4"),
-    orientation = c("landscape", "portrait"),
+test_that("compute_max_table_width covers default page width ranges in cm", {
+  cases <- data.frame(
+    paper = c("letter", "letter", "legal", "legal", "A4", "A4", "RD4", "RD4"),
+    orientation = c(
+      "landscape", "portrait", "landscape", "portrait",
+      "landscape", "portrait", "landscape", "portrait"
+    ),
+    expected = c(22.86, 16.51, 30.48, 16.51, 24.62, 15.92, 22.22, 14.52),
     stringsAsFactors = FALSE
   )
 
   for (i in seq_len(nrow(cases))) {
-    w_in <- derrick:::compute_max_table_width(
-      cases$paper[[i]], cases$orientation[[i]], "inches", NULL
-    )
     w_cm <- derrick:::compute_max_table_width(
       cases$paper[[i]], cases$orientation[[i]], "cm", NULL
     )
     expect_equal(
       w_cm,
-      w_in * 2.54,
+      cases$expected[[i]],
       tolerance = 1e-9,
       info = paste(cases$paper[[i]], cases$orientation[[i]])
     )
@@ -365,73 +373,6 @@ test_that("compute_max_table_width bottoms out at zero when margins exceed page 
   expect_equal(w, 0)
 })
 
-# ---------------------------------------------------------------------------
-test_that("estimate_rows_per_page returns NULL for zero rows", {
-  expect_null(derrick:::estimate_rows_per_page(
-    0, 9, "letter", "landscape", "inches", NULL
-  ))
-})
-
-test_that("estimate_rows_per_page returns a positive integer", {
-  rpp <- derrick:::estimate_rows_per_page(
-    100, 9, "letter", "landscape", "inches", NULL
-  )
-  expect_true(!is.null(rpp))
-  expect_true(rpp > 0)
-  expect_true(rpp <= 100)
-})
-
-test_that("estimate_rows_per_page returns NULL for infinite paper", {
-  rpp <- derrick:::estimate_rows_per_page(
-    50, 9, "none", "landscape", "inches", NULL
-  )
-  expect_null(rpp)
-})
-
-test_that("estimate_rows_per_page: lpi overrides font_size", {
-  rpp_lpi  <- derrick:::estimate_rows_per_page(100, lpi = 6L,
-                 paper_size = "letter", orientation = "landscape",
-                 units = "inches", margins = NULL)
-  rpp_same <- derrick:::estimate_rows_per_page(100, font_size = 99,
-                 lpi = 6L,
-                 paper_size = "letter", orientation = "landscape",
-                 units = "inches", margins = NULL)
-  expect_equal(rpp_lpi, rpp_same)
-})
-
-test_that("estimate_rows_per_page: larger font_size yields fewer rows", {
-  rpp_small <- derrick:::estimate_rows_per_page(500, font_size = 8,
-                 paper_size = "letter", orientation = "landscape",
-                 units = "inches", margins = NULL)
-  rpp_large <- derrick:::estimate_rows_per_page(500, font_size = 14,
-                 paper_size = "letter", orientation = "landscape",
-                 units = "inches", margins = NULL)
-  expect_true(rpp_small > rpp_large)
-})
-
-test_that("estimate_rows_per_page: TXT at 6 LPI is stable regardless of font_size", {
-  rpp_9  <- derrick:::estimate_rows_per_page(500, font_size = 9,
-               lpi = 6L, paper_size = "letter", orientation = "landscape",
-               units = "inches", margins = NULL)
-  rpp_14 <- derrick:::estimate_rows_per_page(500, font_size = 14,
-               lpi = 6L, paper_size = "letter", orientation = "landscape",
-               units = "inches", margins = NULL)
-  expect_equal(rpp_9, rpp_14)
-})
-
-test_that("estimate_rows_per_page: extra reserved lines reduce data rows", {
-  rpp_default <- derrick:::estimate_rows_per_page(
-    500, font_size = 9, paper_size = "letter", orientation = "landscape",
-    units = "inches", margins = NULL
-  )
-  rpp_reserved <- derrick:::estimate_rows_per_page(
-    500, font_size = 9, paper_size = "letter", orientation = "landscape",
-    units = "inches", margins = NULL, reserve_lines = 12L
-  )
-  expect_true(rpp_reserved < rpp_default)
-})
-
-# ---------------------------------------------------------------------------
 # max_chars_per_line conversion (inline logic, no package needed)
 # ---------------------------------------------------------------------------
 test_that("max_chars_per_line converts to inches via 12 CPI", {
@@ -448,7 +389,7 @@ test_that("max_chars_per_line in cm is 2.54x the inch equivalent", {
 })
 
 test_that("max_chars_per_line tighter than page_max wins", {
-  page_max     <- 9     # inches — letter landscape minus margins
+  page_max     <- 9     # inches, letter landscape minus margins
   chars_width  <- 120 / 12  # = 10 inches (wider than page_max)
   result       <- min(page_max, chars_width)
   expect_equal(result, 9)   # page_max wins
@@ -509,7 +450,7 @@ test_that("normalize_spanning_headers returns NULL for NULL", {
 })
 
 # ---------------------------------------------------------------------------
-# convert_gts_spanning_header — gtsummary format → from/to/label
+# convert_gts_spanning_header: gtsummary format to from/to/label
 # ---------------------------------------------------------------------------
 make_gts_span <- function(columns, headers, level = 1L, remove = FALSE) {
   data.frame(
@@ -522,7 +463,7 @@ make_gts_span <- function(columns, headers, level = 1L, remove = FALSE) {
   )
 }
 
-test_that("convert_gts_spanning_header: two consecutive columns → one span", {
+test_that("convert_gts_spanning_header: two consecutive columns produce one span", {
   gts  <- make_gts_span(c("stat_1", "stat_2"), c("Treatment", "Treatment"))
   cols <- c("label", "stat_1", "stat_2")
   res  <- derrick:::convert_gts_spanning_header(gts, cols)
@@ -672,7 +613,7 @@ test_that("compute_report_line_chars uses the strictest requested output", {
 })
 
 # ---------------------------------------------------------------------------
-# SOC / PT wrapping — dummy AE table data
+# SOC / PT wrapping: dummy AE table data
 # ---------------------------------------------------------------------------
 # Simulates a typical adverse-event table:
 #   SOC rows have no leading indent
@@ -750,11 +691,4 @@ test_that("apply_tbl_footnotes returns applied=FALSE for empty footnotes", {
   res <- derrick:::apply_tbl_footnotes(dummy_tbl, character(0))
   expect_equal(res$tbl,     dummy_tbl)
   expect_false(res$applied)
-})
-
-test_that("format_iso8601_utc includes UTC+0 suffix", {
-  ts  <- as.POSIXct("2024-01-15 08:30:00", tz = "UTC")
-  out <- derrick:::format_iso8601_utc(ts)
-  expect_true(grepl("UTC\\+0", out))
-  expect_true(grepl("2024-01-15", out))
 })

@@ -5,9 +5,11 @@ SECURITY.md
 ^.*\.Rproj$
 ^\.Rproj\.user$
 ^_pkgdown\.yml$
-^vignettes/hello\.Rmd$
 ^docs$
 ^\.github$
+^\.claude$
+^.*\.Rcheck$
+^.*\.tar\.gz$
 README.*
 ^\.lintr$
 ^staged_dependencies\.yaml$

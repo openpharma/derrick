@@ -4,9 +4,11 @@
 \name{derrick-package}
 \alias{derrick}
 \alias{derrick-package}
-\title{derrick: R Package Template}
+\title{derrick: Export gtsummary Tables with reporter}
 \description{
-R package template with GitHub Actions workflows included.
+Convert gtsummary tables and plain data frames into clinical-style reporter RTF
+and TXT outputs with controlled widths, pagination, indentation, spanning
+headers, and optional intermediate data exports.
 }
 \seealso{
 Useful links:
@@ -17,10 +19,11 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Xiecheng Gu
+\strong{Maintainer}: Joe Zhu \email{sha.joe.zhu@gmail.com}
 
 Authors:
 \itemize{
+  \item Xiecheng Gu
   \item Joe Zhu \email{sha.joe.zhu@gmail.com}
   \item Bill Huang
 }

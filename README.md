@@ -9,7 +9,7 @@
 ![GitHub pull requests](https://img.shields.io/github/issues-pr/openpharma/derrick)
 ![GitHub repo size](https://img.shields.io/github/repo-size/openpharma/derrick)
 ![GitHub language count](https://img.shields.io/github/languages/count/openpharma/derrick)
-[![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
+[![Project Status: Active - The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 [![Downloads](https://img.shields.io/github/downloads/openpharma/derrick/latest/total)](https://tooomm.github.io/github-release-stats/?username=openpharma\&repository=derrick)
 [![Current Version](https://img.shields.io/github/r-package/v/openpharma/derrick/main?color=purple\&label=package%20version)](https://github.com/openpharma/derrick/tree/main)
 [![Open Issues](https://img.shields.io/github/issues-raw/openpharma/derrick?color=red\&label=open%20issues)](https://github.com/openpharma/derrick/issues?q=is%3Aissue+is%3Aopen+sort%3Aupdated-desc)
@@ -30,6 +30,9 @@
 [![Version bump](https://github.com/openpharma/derrick/actions/workflows/version-bump.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/version-bump.yaml)
 [![Version check](https://github.com/openpharma/derrick/actions/workflows/version.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/version.yaml)
 [![gitleaks](https://github.com/openpharma/derrick/actions/workflows/gitleaks.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/gitleaks.yaml)
+
+Convert `gtsummary` tables and plain data frames into clinical-style
+`reporter` RTF and TXT outputs.
 
 ## Width parameters
 
@@ -53,8 +56,10 @@ With default margins, the common effective page widths are:
 | `"letter"` | `"portrait"` | 6.50 | 16.51 |
 | `"legal"` | `"landscape"` | 12.00 | 30.48 |
 | `"legal"` | `"portrait"` | 6.50 | 16.51 |
-| `"a4"` / `"rd4"` | `"landscape"` | 9.69 | 24.61 |
-| `"a4"` / `"rd4"` | `"portrait"` | 6.27 | 15.93 |
+| `"A4"` | `"landscape"` | 9.69 | 24.62 |
+| `"A4"` | `"portrait"` | 6.27 | 15.92 |
+| `"RD4"` | `"landscape"` | 8.70 | 22.22 |
+| `"RD4"` | `"portrait"` | 5.70 | 14.52 |
 
 Manual `column_widths` are applied in display-column order, usually `label`
 first and then statistic columns. Their practical total range is
@@ -64,4 +69,12 @@ per-column floor is relaxed to `effective_width / n_cols`.
 
 For the default 9-inch landscape letter page, use values such as `"3|2|2|2"`
 for a 4-column table or `"3|1.5|1.5|1.5|1.5"` for a 5-column table.
+
+## Pagination
+
+By default, `rows_per_page = NULL` leaves pagination to `reporter`.
+`reporter::write_report()` computes page breaks from the selected output
+format, fixed page metrics, and the actual wrapped title, header, row, and
+footnote line counts. Supply `rows_per_page` only when you want to force manual
+chunks before reporter's own pagination runs.
 
