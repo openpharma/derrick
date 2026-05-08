@@ -1,1 +1,1 @@
-crane.reporter::shiny_app()
+derrick::shiny_app()

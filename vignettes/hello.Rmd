@@ -7,6 +7,6 @@ date: "`r Sys.Date()`"
 Hello World!
 
 ```{r}
-library(crane.reporter)
-hello("crane.reporter!")
+library(derrick)
+hello("derrick!")
 ```

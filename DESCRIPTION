@@ -1,5 +1,5 @@
 Type: Package
-Package: crane.reporter
+Package: derrick
 Title: R Package Template
 Version: 0.1.0.9212
 Date: 2026-04-07
@@ -9,8 +9,8 @@ Authors@R: c(
     person("Bill Huang", , , "", role = c("aut")))
 Description: R package template with GitHub Actions workflows included.
 License: Apache License 2.0 | file LICENSE
-URL: https://github.com/openpharma/crane.reporter/
-BugReports: https://github.com/openpharma/crane.reporter/issues
+URL: https://github.com/openpharma/derrick/
+BugReports: https://github.com/openpharma/derrick/issues
 Depends:
     R (>= 4.4),
     crane
