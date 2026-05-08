@@ -76,4 +76,3 @@ By default, `rows_per_page = NULL` leaves pagination to `reporter`.
 format, fixed page metrics, and the actual wrapped title, header, row, and
 footnote line counts. Supply `rows_per_page` only when you want to force manual
 chunks before reporter's own pagination runs.
-
