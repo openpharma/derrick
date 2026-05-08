@@ -1,26 +1,31 @@
 Type: Package
 Package: crane.reporter
-Title: R Package Template
+Title: Export gtsummary Tables with reporter
 Version: 0.1.0.9212
 Date: 2026-04-07
 Authors@R: c(
-    person("Xiecheng Gu", , , "", role = c("aut", "cre")),
-    person("Joe Zhu", , , "sha.joe.zhu@gmail.com", role = c("aut")),
+    person("Xiecheng Gu", , , "", role = c("aut")),
+    person("Joe Zhu", , , "sha.joe.zhu@gmail.com", role = c("aut", "cre")),
     person("Bill Huang", , , "", role = c("aut")))
-Description: R package template with GitHub Actions workflows included.
+Description: Convert gtsummary tables and plain data frames into clinical-style
+    reporter RTF and TXT outputs with controlled widths, pagination, indentation,
+    spanning headers, and optional intermediate data exports.
 License: Apache License 2.0 | file LICENSE
 URL: https://github.com/openpharma/crane.reporter/
 BugReports: https://github.com/openpharma/crane.reporter/issues
 Depends:
-    R (>= 4.4),
-    crane
+    R (>= 4.4)
 Imports:
+    dplyr,
+    purrr,
+    reporter,
     rlang,
-    stringi
+    stringi,
+    tibble
 Suggests:
+    cards,
+    gtsummary,
     testthat (>= 3.3.0)
-VignetteBuilder:
-    knitr
 Encoding: UTF-8
 Language: en-US
 LazyData: true

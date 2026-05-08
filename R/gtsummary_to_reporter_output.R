@@ -15,8 +15,9 @@
 #   (letter + landscape + inches + 1-inch left/right margins), this is 9.
 #   Common default maxima are: letter landscape 9 in / 22.86 cm, letter
 #   portrait 6.5 in / 16.51 cm, legal landscape 12 in / 30.48 cm, legal
-#   portrait 6.5 in / 16.51 cm, A4/RD4 landscape 9.69 in / 24.61 cm, and
-#   A4/RD4 portrait 6.27 in / 15.93 cm.
+#   portrait 6.5 in / 16.51 cm, A4 landscape 9.69 in / 24.62 cm, A4 portrait
+#   6.27 in / 15.92 cm, RD4 landscape 8.70 in / 22.22 cm, and RD4 portrait
+#   5.70 in / 14.52 cm.
 # - min_col_width: minimum width for any column
 # - column_widths: manual widths in display-column order (usually label first,
 #   then statistic columns), e.g. "3|2|2|2" for a 4-column table on the default
@@ -29,15 +30,16 @@
 # - column_labels: override column header labels (named vector or data.frame)
 # - spanning_headers: spanning header specs (data.frame or list)
 # - report_orientation: "landscape" or "portrait"
-# - report_paper_size: "letter", "legal", "a4", or numeric c(width, height)
+# - report_paper_size: "letter", "legal", "A4", "RD4", or numeric c(width, height)
 # - report_units: "inches" or "cm"
 # - report_margins: NULL or named vector/list (top/right/bottom/left)
 # - report_font_size: base font size for table
 # - indent_unit: spaces per indent unit for label column
 # - output_types: c("RTF","TXT") output selection
 # - save_rds: save processed data and ARD objects as RDS
-# - rds_dir: output directory for RDS (uses file_path directory if empty)
-# - rows_per_page: rows per page (auto if NULL)
+# - rds_dir: reserved argument for backward compatibility
+# - rows_per_page: optional manual rows per pre-split chunk (reporter handles
+#   pagination when NULL)
 # - debug_indent: print indent debug details
 # - debug_spanning: print spanning header debug details
 # - group_columns: optional grouping columns to hide and blank_after
@@ -83,6 +85,13 @@
 #' 4. Apply automatic or manual `column_widths`, then scale columns down to the
 #'    effective table width when needed.
 #'
+#' Pagination is delegated to `reporter` by default. When `rows_per_page` is
+#' `NULL`, the table is passed to `reporter::write_report()` as one table, and
+#' reporter computes page breaks using output-specific fixed metrics plus the
+#' actual wrapped title, header, row, and footnote line counts. Set
+#' `rows_per_page` only when you need to force manual chunks before reporter's
+#' own pagination runs.
+#'
 #' @param gts_obj A `gtsummary` object (with `table_body`/`table_styling`) or
 #'   a plain `data.frame` to export.
 #' @param file_path Output path. The extension is ignored and output files are
@@ -95,13 +104,15 @@
 #'   `report_orientation = "landscape"`, `report_units = "inches"`, and
 #'   default 1-inch left/right margins), the maximum effective value is `9`.
 #'   For common defaults in inches: letter landscape = `9`, letter portrait =
-#'   `6.5`, A4 landscape = `9.69`, A4 portrait = `6.27`, legal landscape =
-#'   `12`, legal portrait = `6.5`. The same defaults in centimeters are:
-#'   letter landscape = `22.86`, letter portrait = `16.51`, A4 landscape =
-#'   `24.61`, A4 portrait = `15.93`, legal landscape = `30.48`, legal portrait =
-#'   `16.51`. `report_paper_size = "none"` gives an infinite page width. If
-#'   margins exceed the physical page width, the effective width is `0`. Use
-#'   `NULL` unless you intentionally want a narrower table.
+#'   `6.5`, A4 landscape = `9.69`, A4 portrait = `6.27`, RD4 landscape =
+#'   `8.70`, RD4 portrait = `5.70`, legal landscape = `12`, legal portrait =
+#'   `6.5`. The same defaults in centimeters are: letter landscape = `22.86`,
+#'   letter portrait = `16.51`, A4 landscape = `24.62`, A4 portrait = `15.92`,
+#'   RD4 landscape = `22.22`, RD4 portrait = `14.52`, legal landscape =
+#'   `30.48`, legal portrait = `16.51`. `report_paper_size = "none"` gives an
+#'   infinite page width. If margins exceed the physical page width, the
+#'   effective width is `0`. Use `NULL` unless you intentionally want a narrower
+#'   table.
 #' @param min_col_width Minimum width allowed for any column, in `report_units`.
 #' @param column_widths Optional manual column widths in `report_units`, either
 #'   a numeric vector or a `"|"`-delimited string. Values are applied in display
@@ -126,7 +137,7 @@
 #' @param spanning_headers Optional spanning header definitions, as a data frame
 #'   or list with fields `from`, `to`, and `label`.
 #' @param report_orientation Page orientation (`"landscape"` or `"portrait"`).
-#' @param report_paper_size Paper size (`"letter"`, `"legal"`, `"a4"`, `"rd4"`,
+#' @param report_paper_size Paper size (`"letter"`, `"legal"`, `"A4"`, `"RD4"`,
 #'   `"none"`, or numeric length-2 vector).
 #' @param report_units Units for dimensions (`"inches"` or `"cm"`).
 #' @param report_margins Optional margins as named vector/list (`top`, `right`,
@@ -138,8 +149,9 @@
 #' @param save_rds Logical; when `TRUE`, save processed output data and ARD
 #'   object (if available) as `.rds` files.
 #' @param rds_dir Reserved argument for backward compatibility.
-#' @param rows_per_page Optional maximum number of table rows per page. If
-#'   `NULL`, estimated from page geometry and `report_font_size`.
+#' @param rows_per_page Optional maximum number of table rows per manual chunk.
+#'   If `NULL`, no manual pre-splitting is done; reporter handles pagination in
+#'   `write_report()` using its output-specific layout algorithm.
 #' @param debug_indent Logical; print indentation diagnostics.
 #' @param debug_spanning Logical; print spanning-header diagnostics.
 #' @param group_columns Optional grouping columns to hide and apply
@@ -202,6 +214,7 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
   footnotes_vec <- collect_env_lines("footnote", max_n = 9L, env = parent.frame())
   title         <- strip_md_bold(title)
   footnotes_vec <- strip_md_bold(footnotes_vec)
+  report_paper_size <- normalize_reporter_paper_size(report_paper_size)
 
   # B. Build indent map ----------------------------------------------------------
   indent_map  <- tibble::tibble(row_id = integer(), indent = integer())
@@ -233,13 +246,10 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
     )
   }
 
-  has_label_rows <- "row_type" %in% names(raw_body) &&
-    any(raw_body$row_type == "label", na.rm = TRUE)
-
   # C. Build header data frame ---------------------------------------------------
   if (!is.null(styling) && !is.null(styling$header)) {
     header_df <- styling$header %>%
-      mutate(
+      dplyr::mutate(
         column = as.character(column),
         label  = strip_md_bold(as.character(label)),
         hide   = as.logical(hide)
@@ -254,12 +264,6 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
     )
   }
 
-  visible_cols <- header_df %>%
-    dplyr::filter(!hide) %>%
-    dplyr::distinct(column) %>%
-    dplyr::pull(column)
-  visible_cols <- intersect(visible_cols, names(raw_body))
-
   pvalue_cols <- names(raw_body)[grepl("^p\\.value", names(raw_body))]
 
   # D. Build processed data frame ------------------------------------------------
@@ -273,10 +277,10 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
       group_cols_raw
     ))
     processed_df <- raw_body %>%
-      select(any_of(selected_cols)) %>%
-      mutate(row_id = dplyr::row_number()) %>%
+      dplyr::select(dplyr::any_of(selected_cols)) %>%
+      dplyr::mutate(row_id = dplyr::row_number()) %>%
       dplyr::left_join(indent_map, by = "row_id") %>%
-      mutate(
+      dplyr::mutate(
         label = if (nrow(indent_map) > 0) sub("^\\s+", "", label) else label,
         label = ifelse(!is.na(indent),
                        paste0(strrep(" ", indent * indent_unit), label),
@@ -295,14 +299,14 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
   # D1. Optional indent diagnostics ---------------------------------------------
   if (isTRUE(debug_indent) && !is.null(indent_tbl) && nrow(indent_tbl) > 0) {
     debug_df <- raw_body %>%
-      mutate(
+      dplyr::mutate(
         row_id = dplyr::row_number(),
         leading_spaces = ifelse(
           is.na(label), NA_integer_,
           nchar(label) - nchar(sub("^\\s+", "", label))
         )
       ) %>%
-      select(row_id, row_type, variable, label, leading_spaces) %>%
+      dplyr::select(row_id, row_type, variable, label, leading_spaces) %>%
       dplyr::left_join(indent_map, by = "row_id")
 
     message("---- INDENT DEBUG (first 20 rows) ----")
@@ -340,27 +344,27 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
     if ("variable" %in% names(processed_df)) {
       processed_df <- processed_df %>%
         dplyr::group_by(variable) %>%
-        mutate(
-          .has_p  = dplyr::if_any(any_of(pvalue_cols), ~ !is.na(.x) & .x != ""),
+        dplyr::mutate(
+          .has_p  = dplyr::if_any(dplyr::any_of(pvalue_cols), ~ !is.na(.x) & .x != ""),
           .keep_p = if (any(.has_p)) dplyr::row_number() == min(which(.has_p)) else FALSE
         ) %>%
         dplyr::ungroup() %>%
-        mutate(across(any_of(pvalue_cols), ~ ifelse(.keep_p, .x, NA)))
+        dplyr::mutate(dplyr::across(dplyr::any_of(pvalue_cols), ~ ifelse(.keep_p, .x, NA)))
     } else {
       processed_df <- processed_df %>%
-        mutate(
-          .has_p  = dplyr::if_any(any_of(pvalue_cols), ~ !is.na(.x) & .x != ""),
+        dplyr::mutate(
+          .has_p  = dplyr::if_any(dplyr::any_of(pvalue_cols), ~ !is.na(.x) & .x != ""),
           .keep_p = if (any(.has_p)) dplyr::row_number() == min(which(.has_p)) else FALSE
         ) %>%
-        mutate(across(any_of(pvalue_cols), ~ ifelse(.keep_p, .x, NA)))
+        dplyr::mutate(dplyr::across(dplyr::any_of(pvalue_cols), ~ ifelse(.keep_p, .x, NA)))
     }
   }
 
   if (!is_plain_df && length(pvalue_cols) > 0) {
     processed_df <- processed_df %>%
-      mutate(
-        across(
-          any_of(pvalue_cols),
+      dplyr::mutate(
+        dplyr::across(
+          dplyr::any_of(pvalue_cols),
           ~ {
             x_num <- if (is.numeric(.x)) .x else suppressWarnings(as.numeric(.x))
             ifelse(is.na(x_num), "", formatC(x_num, format = "f", digits = 4))
@@ -371,8 +375,8 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
 
   if (!is_plain_df) {
     processed_df <- processed_df %>%
-      select(-row_id, -indent, -row_type, -variable,
-             -any_of(c(".keep_p", ".has_p")))
+      dplyr::select(-row_id, -indent, -row_type, -variable,
+                    -dplyr::any_of(c(".keep_p", ".has_p")))
   }
 
   # Ensure RDS directory exists early
@@ -401,7 +405,7 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
   # Build definitive header label map (visible cols + "label" pseudo-column)
   hdr_map <- header_df %>%
     dplyr::filter(!hide) %>%
-    select(column, label)
+    dplyr::select(column, label)
   if (!is.null(label_overrides)) {
     hdr_map$label <- ifelse(
       hdr_map$column %in% names(label_overrides),
@@ -423,7 +427,7 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
     width_cols <- c("label", width_cols)
   }
   col_widths   <- vapply(processed_df[width_cols], calc_col_width, numeric(1))
-  label_widths <- setNames(
+  label_widths <- stats::setNames(
     vapply(hdr_map$label, calc_col_width, numeric(1)),
     hdr_map$column
   )
@@ -479,7 +483,6 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
   }
   title         <- wrap_report_lines(title, max_report_line_chars)
   footnotes_vec <- wrap_report_lines(footnotes_vec, max_report_line_chars)
-  metadata_reserve_lines <- max(4L, length(title) + length(footnotes_vec) + 2L)
 
   manual_widths <- parse_column_widths(column_widths, n_cols = length(col_widths))
   if (!is.null(manual_widths)) {
@@ -565,7 +568,7 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
     NULL
   }
   spanning_header_fn <- tryCatch(
-    getFromNamespace("spanning_header", "reporter"),
+    utils::getFromNamespace("spanning_header", "reporter"),
     error = function(e) NULL
   )
 
@@ -592,26 +595,6 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
                    c(list(x = rpt), as.list(report_margins)))
   }
 
-  if (is.null(rows_per_page)) {
-    geom_args <- list(
-      row_count   = nrow(processed_df),
-      paper_size  = report_paper_size,
-      orientation = report_orientation,
-      units       = report_units,
-      margins     = report_margins,
-      reserve_lines = metadata_reserve_lines
-    )
-    out_upper     <- toupper(output_types)
-    rpp_candidates <- c(
-      if ("RTF" %in% out_upper)
-        do.call(estimate_rows_per_page, c(geom_args, list(font_size = report_font_size))),
-      if ("TXT" %in% out_upper)
-        # TXT renderer ignores font_size and uses fixed 6 LPI (Courier 12 CPI)
-        do.call(estimate_rows_per_page, c(geom_args, list(lpi = 6L)))
-    )
-    rows_per_page <- if (length(rpp_candidates) > 0) min(rpp_candidates) else NULL
-  }
-
   # Package all build_table_spec context into one list for DRY call sites
   tbl_spec_args <- list(
     col_widths         = col_widths,
@@ -628,6 +611,8 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
 
   footnote_applied <- FALSE
 
+  # reporter computes page breaks during write_report() from output-specific
+  # fixed metrics and actual wrapped line counts. Pre-split only on request.
   if (!is.null(rows_per_page) && is.finite(rows_per_page) && rows_per_page > 0) {
     row_ids   <- seq_len(nrow(processed_df))
     chunk_ids <- split(row_ids, ceiling(row_ids / rows_per_page))
@@ -695,10 +680,14 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
 
       if (!is_plain_df) {
         ard_obj <- NULL
-        if (exists("gather_ard", where = asNamespace("gtsummary"), inherits = FALSE)) {
-          ard_obj <- tryCatch(gtsummary::gather_ard(gts_obj), error = function(e) NULL)
-        } else if (exists("as_ard", where = asNamespace("cards"), inherits = FALSE)) {
-          ard_obj <- tryCatch(cards::as_ard(gts_obj), error = function(e) NULL)
+        if (requireNamespace("gtsummary", quietly = TRUE) &&
+            exists("gather_ard", where = asNamespace("gtsummary"), inherits = FALSE)) {
+          gather_ard <- utils::getFromNamespace("gather_ard", "gtsummary")
+          ard_obj <- tryCatch(gather_ard(gts_obj), error = function(e) NULL)
+        } else if (requireNamespace("cards", quietly = TRUE) &&
+                   exists("as_ard", where = asNamespace("cards"), inherits = FALSE)) {
+          as_ard <- utils::getFromNamespace("as_ard", "cards")
+          ard_obj <- tryCatch(as_ard(gts_obj), error = function(e) NULL)
         }
         if (!is.null(ard_obj)) {
           saveRDS(ard_obj, file.path(rds_full_dir, paste0(base_name, "_ard.rds")))
