@@ -87,7 +87,7 @@ jobs:
         uses: lycheeverse/lychee-action@7cd0af4c74a61395d455af97419279d86aafaede # v2.0.2
         with:
           args: >-
-            --exclude "https://github.com.*.git|https://insightsengineering.github.io.*|lewagon.*|knightdave.*|.*users.noreply.github.com|lycheeverse.*"
+            --exclude "https://github.com.*.git|lewagon.*|knightdave.*|.*users.noreply.github.com|lycheeverse.*"
             --verbose
             --no-progress
             ${{ inputs.lychee-additional-args }}

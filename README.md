@@ -14,7 +14,6 @@
 [![Current Version](https://img.shields.io/github/r-package/v/openpharma/crane.reporter/main?color=purple\&label=package%20version)](https://github.com/openpharma/crane.reporter/tree/main)
 [![Open Issues](https://img.shields.io/github/issues-raw/openpharma/crane.reporter?color=red\&label=open%20issues)](https://github.com/openpharma/crane.reporter/issues?q=is%3Aissue+is%3Aopen+sort%3Aupdated-desc)
 
-[![Audit Dependencies](https://github.com/openpharma/crane.reporter/actions/workflows/audit.yaml/badge.svg)](https://github.com/openpharma/crane.reporter/actions/workflows/audit.yaml)
 [![BiocCheck](https://github.com/openpharma/crane.reporter/actions/workflows/bioccheck.yaml/badge.svg)](https://github.com/openpharma/crane.reporter/actions/workflows/bioccheck.yaml)
 [![Check URLs](https://github.com/openpharma/crane.reporter/actions/workflows/links.yaml/badge.svg)](https://github.com/openpharma/crane.reporter/actions/workflows/links.yaml)
 [![Coverage](https://github.com/openpharma/crane.reporter/actions/workflows/test-coverage.yaml/badge.svg)](https://github.com/openpharma/crane.reporter/actions/workflows/test-coverage.yaml)
@@ -77,4 +76,3 @@ By default, `rows_per_page = NULL` leaves pagination to `reporter`.
 format, fixed page metrics, and the actual wrapped title, header, row, and
 footnote line counts. Supply `rows_per_page` only when you want to force manual
 chunks before reporter's own pagination runs.
-
