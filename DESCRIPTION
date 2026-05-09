@@ -1,5 +1,5 @@
 Type: Package
-Package: crane.reporter
+Package: derrick
 Title: Export gtsummary Tables with reporter
 Version: 0.1.0.9212
 Date: 2026-04-07
@@ -11,8 +11,8 @@ Description: Convert gtsummary tables and plain data frames into clinical-style
     reporter RTF and TXT outputs with controlled widths, pagination, indentation,
     spanning headers, and optional intermediate data exports.
 License: Apache License 2.0 | file LICENSE
-URL: https://github.com/openpharma/crane.reporter/
-BugReports: https://github.com/openpharma/crane.reporter/issues
+URL: https://github.com/openpharma/derrick/
+BugReports: https://github.com/openpharma/derrick/issues
 Depends:
     R (>= 4.4)
 Imports:
