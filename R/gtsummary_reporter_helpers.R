@@ -1,7 +1,7 @@
 # =============================================================================
 # gtsummary_reporter_helpers.r
 #
-# Internal helper functions for gtsummary_to_reporter_output().
+# Internal helper functions for gtsummary_reporter().
 # None of these are exported; they are documented with @noRd to suppress
 # man-page generation.
 # =============================================================================

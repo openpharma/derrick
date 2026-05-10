@@ -1,3 +1,7 @@
+test_that("gtsummary_reporter is the exported entry point", {
+  expect_true(is.function(derrick::gtsummary_reporter))
+})
+
 test_that("strip_md_bold removes ** markers", {
   expect_equal(derrick:::strip_md_bold("**bold**"),     "bold")
   expect_equal(derrick:::strip_md_bold("__bold__"),     "bold")
@@ -154,7 +158,7 @@ test_that("manual column widths are scaled to the effective page width", {
 })
 
 # ---------------------------------------------------------------------------
-# label-first width logic (inline in gtsummary_to_reporter_output):
+# label-first width logic (inline in gtsummary_reporter):
 # tested here via the helper primitives it composes
 # ---------------------------------------------------------------------------
 

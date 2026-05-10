@@ -1,12 +1,12 @@
 # =============================================================================
-# Script: gtsummary_to_reporter_output
+# Script: gtsummary_reporter
 #
 # Packages referenced:
 # - gtsummary: table building and styling
 # - reporter: RTF/TXT/DOCX/HTML/PDF report generation
 # - tidyverse: dplyr/tidyr helpers used in processing
 #
-# Function arguments (gtsummary_to_reporter_output):
+# Function arguments (gtsummary_reporter):
 # - gts_obj: gtsummary object or plain data.frame to export
 # - file_path: output path (extension determines RTF/TXT names)
 # - max_table_width: max width (inches/cm) for all columns combined. The largest
@@ -54,7 +54,7 @@
 # title1 <- "Table 14.1 Summary of Demographics"
 # footnote1 <- "MMRM = Mixed Model for Repeated Measures"
 # progname <- "ctr/t-bin-eff.r"
-# gtsummary_to_reporter_output(
+# gtsummary_reporter(
 #   gts_obj = my_gts_table,
 #   file_path = "Clinical_Trial_Output.rtf",
 #   column_widths = "3|2|2",
@@ -167,7 +167,7 @@
 #'   gtsummary::tbl_summary(by = trt) |>
 #'   gtsummary::add_p()
 #'
-#' out <- gtsummary_to_reporter_output(
+#' out <- gtsummary_reporter(
 #'   gts_obj = gts_tbl,
 #'   file_path = tempfile("clinical_report_", fileext = ".rtf"),
 #'   output_types = "TXT",
@@ -177,7 +177,7 @@
 #' out
 #'
 #' @export
-gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.rtf",
+gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
                                            max_table_width = NULL, min_col_width = 0.6,
                                            column_widths = NULL,
                                            column_labels = NULL,
@@ -736,7 +736,7 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
 # footnote1 <- "aa"
 # progname <- "ctr/t-bin-eff.r"
 #
-# final_path <- gtsummary_to_reporter_output(
+# final_path <- gtsummary_reporter(
 #   gts_obj = my_gts_table,
 #   file_path = "Clinical_Trial_Output.rtf"
 # )
@@ -747,7 +747,7 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
 #   tbl_summary(by = trt) %>%
 #   modify_spanning_header(all_stat_cols() ~ "**Treatment Group**")
 #
-# span_path <- gtsummary_to_reporter_output(
+# span_path <- gtsummary_reporter(
 #   gts_obj = span_tbl,
 #   file_path = "Clinical_Trial_Spanning_Header_Output.rtf",
 #   spanning_headers = data.frame(
@@ -765,7 +765,7 @@ gtsummary_to_reporter_output <- function(gts_obj, file_path = "Clinical_Report.r
 #   stat_2 = c("12 (60%)", "4 (20%)", "4 (20%)")
 # )
 # title1 <- "Table 14.3 Simple Tibble Input"
-# simple_path <- gtsummary_to_reporter_output(
+# simple_path <- gtsummary_reporter(
 #   gts_obj = simple_tbl,
 #   file_path = "Clinical_Trial_Simple_Tibble_Output.rtf",
 #   output_types = c("RTF", "TXT"),
