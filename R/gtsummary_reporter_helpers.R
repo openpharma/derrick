@@ -221,6 +221,61 @@ normalize_column_labels <- function(x) {
 # Page geometry helpers
 # ---------------------------------------------------------------------------
 
+#' Return output types supported by gtsummary_reporter()
+#' @noRd
+supported_output_types <- function() {
+  c("RTF", "TXT", "DOCX", "PDF", "HTML")
+}
+
+#' Normalize and validate requested output types
+#' @noRd
+normalize_output_types <- function(output_types) {
+  if (is.null(output_types) || length(output_types) == 0L) {
+    stop("`output_types` must contain at least one supported output type.", call. = FALSE)
+  }
+
+  output_types <- trimws(toupper(as.character(output_types)))
+  output_types <- output_types[!is.na(output_types) & nzchar(output_types)]
+  if (length(output_types) == 0L) {
+    stop("`output_types` must contain at least one supported output type.", call. = FALSE)
+  }
+
+  supported <- supported_output_types()
+  unsupported <- setdiff(output_types, supported)
+  if (length(unsupported) > 0L) {
+    stop(
+      paste0(
+        "Unsupported `output_types`: ",
+        paste(unsupported, collapse = ", "),
+        ". Supported values are: ",
+        paste(supported, collapse = ", "),
+        "."
+      ),
+      call. = FALSE
+    )
+  }
+
+  unique(output_types)
+}
+
+#' Return the file extension for a supported output type
+#' @noRd
+output_file_extension <- function(output_type) {
+  output_type <- normalize_output_types(output_type)
+  if (length(output_type) != 1L) {
+    stop("`output_type` must be a single output type.", call. = FALSE)
+  }
+
+  switch(
+    output_type,
+    RTF  = "rtf",
+    TXT  = "txt",
+    DOCX = "docx",
+    PDF  = "pdf",
+    HTML = "html"
+  )
+}
+
 #' Normalize named paper sizes to the values accepted by reporter
 #'
 #' @param paper_size A string (`"letter"`, `"legal"`, `"A4"`, `"RD4"`,
@@ -376,11 +431,11 @@ wrap_report_lines <- function(x, max_chars) {
 compute_report_line_chars <- function(width, units, font_size, output_types) {
   if (!is.finite(width) || width <= 0) return(Inf)
   width_in <- if (tolower(units) == "cm") width / 2.54 else width
-  out_upper <- toupper(output_types)
+  out_upper <- normalize_output_types(output_types)
 
   cpi_candidates <- numeric(0)
   if ("TXT" %in% out_upper) cpi_candidates <- c(cpi_candidates, 12)
-  if ("RTF" %in% out_upper) {
+  if (length(intersect(out_upper, c("RTF", "DOCX", "PDF", "HTML"))) > 0L) {
     font_size <- as.numeric(font_size)
     if (is.finite(font_size) && font_size > 0) {
       cpi_candidates <- c(cpi_candidates, 120 / font_size)
@@ -597,6 +652,8 @@ apply_spanning_headers <- function(tbl_obj, span_use, ordered_cols,
   }
 
   if (is.null(spanning_header_fn)) return(tbl_obj)
+  spanning_header_args <- tryCatch(names(formals(spanning_header_fn)), error = function(e) character(0))
+  supports_spanning_bold <- "bold" %in% spanning_header_args
 
   for (i in seq_len(nrow(span_use))) {
     from_col  <- resolve_span_col(span_use$from[i], ordered_cols)
@@ -623,15 +680,19 @@ apply_spanning_headers <- function(tbl_obj, span_use, ordered_cols,
 
     # Prefer index-based spanning (more reliable with reporter)
     if (!is.null(from_idx) && !is.null(to_idx)) {
-      tbl_obj <- spanning_header_fn(
+      call_args <- list(
         x = tbl_obj, from = from_idx, to = to_idx,
         label = label_val, standard_eval = TRUE
       )
+      if (supports_spanning_bold) call_args$bold <- TRUE
+      tbl_obj <- do.call(spanning_header_fn, call_args)
     } else if (!is.null(from_col) && !is.null(to_col)) {
-      tbl_obj <- spanning_header_fn(
+      call_args <- list(
         x = tbl_obj, from = from_col, to = to_col,
         label = label_val, standard_eval = TRUE
       )
+      if (supports_spanning_bold) call_args$bold <- TRUE
+      tbl_obj <- do.call(spanning_header_fn, call_args)
     }
   }
 

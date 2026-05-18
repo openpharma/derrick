@@ -1,0 +1,605 @@
+---
+title: "Exporting Clinical Tables with derrick"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Exporting Clinical Tables with derrick}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+derrick_examples_available <- requireNamespace("derrick", quietly = TRUE) &&
+  requireNamespace("dplyr", quietly = TRUE) &&
+  requireNamespace("gtsummary", quietly = TRUE) &&
+  requireNamespace("reporter", quietly = TRUE)
+
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE,
+  eval = derrick_examples_available
+)
+
+output_dir <- file.path(tempdir(), "derrick-vignette-outputs")
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+path_for_ext <- function(paths, ext) {
+  hit <- paths[tolower(tools::file_ext(paths)) == tolower(ext)]
+  if (length(hit) == 0L) return(NA_character_)
+  unname(hit[[1]])
+}
+
+escape_html_attr <- function(x) {
+  x <- gsub("&", "&amp;", x, fixed = TRUE)
+  x <- gsub("<", "&lt;", x, fixed = TRUE)
+  x <- gsub(">", "&gt;", x, fixed = TRUE)
+  x <- gsub("\"", "&quot;", x, fixed = TRUE)
+  x
+}
+
+print_text_output <- function(path) {
+  if (is.na(path) || !file.exists(path)) {
+    cat("TXT output was not generated in this environment.\n")
+    return(invisible(NULL))
+  }
+
+  text <- readChar(path, nchars = file.info(path)$size[[1]], useBytes = TRUE)
+  text <- gsub("\r\n", "\n", text, fixed = TRUE)
+  text <- gsub("\r", "\n", text, fixed = TRUE)
+  cat(text)
+}
+
+embed_html_output <- function(path, height = 420) {
+  if (is.na(path) || !file.exists(path)) {
+    cat("> HTML output was not generated in this environment.\n")
+    return(invisible(NULL))
+  }
+
+  html_doc <- paste(readLines(path, warn = FALSE), collapse = "\n")
+  cat(
+    '<iframe title="derrick HTML output preview" srcdoc="',
+    escape_html_attr(html_doc),
+    '" style="width:100%; height:',
+    height,
+    'px; border:1px solid #d0d7de;"></iframe>',
+    sep = ""
+  )
+}
+
+output_manifest <- function(paths) {
+  data.frame(
+    format = toupper(tools::file_ext(paths)),
+    file = basename(paths),
+    bytes = unname(file.info(paths)$size),
+    row.names = NULL
+  )
+}
+```
+
+```{r availability-note, echo = FALSE, results = "asis", eval = !derrick_examples_available}
+cat(
+  "> The executable examples in this vignette require derrick, dplyr, ",
+  "gtsummary, and reporter. Install the suggested packages to run the ",
+  "workflow end to end.\n",
+  sep = ""
+)
+```
+
+## Overview
+
+`derrick` converts analysis-ready clinical tables into files written by
+`reporter`. It accepts either a `gtsummary` object or an already assembled plain
+data frame, then applies report metadata, column labels, spanning headers,
+widths, pagination controls, and output-format selection in one call to
+`derrick::gtsummary_reporter()`.
+
+## Relationship to reporter
+
+`derrick` uses `reporter` as the rendering engine. The examples in this vignette
+continue to rely on `reporter` for:
+
+- report setup, including paper size, orientation, units, margins, font, and
+  font size;
+- table rendering, including column definitions, column widths, alignment,
+  borders, header styling, and spanning headers;
+- titles, footnotes, page footers, automatic pagination, and file writing;
+- output writers for RTF, TXT, DOCX, PDF, and HTML.
+
+The main difference is the level of abstraction. With `reporter`, the caller
+usually builds the report and table specification directly. `derrick` builds
+that specification from a `gtsummary` object or a plain data frame, then passes
+it to `reporter`.
+
+`derrick` adds a clinical-table workflow layer around `reporter`:
+
+- it reads displayed columns, labels, indentation, p-values, and spanning
+  headers from `gtsummary` objects;
+- it lets plain data frames use the same export path by supplying
+  `column_labels` and `spanning_headers`;
+- it centralizes clinical report metadata through `title1`, `footnote1`,
+  `progname`, and related numbered variables;
+- it adds table-width controls such as `max_table_width`, `column_widths`, and
+  `max_chars_per_line`;
+- it can write several output formats from the same table specification and
+  optionally save the processed data used for reporting.
+
+A typical workflow is:
+
+1. Build or assemble a table.
+2. Define report metadata such as `title1`, `footnote1`, and `progname`.
+3. Call `derrick::gtsummary_reporter()` with the table, output path, layout
+   arguments, and requested `output_types`.
+4. Inspect the generated files and adjust widths or pagination when needed.
+
+The examples below write TXT and HTML outputs so the results can be displayed
+inside this HTML vignette. Use the same table specification with
+`output_types = c("RTF", "DOCX", "PDF")`, or any supported subset, when final
+delivery files are needed.
+
+## Setup
+
+```{r setup}
+library(dplyr)
+library(gtsummary)
+library(derrick)
+```
+
+## Example 1: gtsummary summary input
+
+The most common input is a `gtsummary` object. In this example, the analysis
+layer creates a demographic summary with a p-value column and a spanning
+header. `derrick` then exports the displayed table structure.
+
+```{r demog-table}
+demog_tbl <- gtsummary::trial |>
+  dplyr::select(trt, age, grade) |>
+  gtsummary::tbl_summary(by = trt) |>
+  gtsummary::add_p() |>
+  gtsummary::modify_spanning_header(
+    gtsummary::all_stat_cols() ~ "**Treatment Group**"
+  )
+
+demog_tbl
+```
+
+For `gtsummary` inputs, `derrick` reads displayed columns, column labels,
+indentation rules, p-values, and spanning headers from the object.
+
+```{r demog-source-preview}
+preview_cols <- intersect(
+  c("label", "stat_1", "stat_2", "p.value"),
+  names(demog_tbl$table_body)
+)
+
+utils::head(demog_tbl$table_body[preview_cols])
+```
+
+```{r demog-metadata}
+title1 <- "Table 14.1.1 Summary of Demographics"
+title2 <- "Safety Population"
+footnote1 <- "Percentages are based on subjects in each treatment group."
+progname <- "programs/t-demog.R"
+```
+
+The `file_path` argument supplies the output stem. The actual formats written
+are controlled by `output_types`, and the function returns the generated file
+paths.
+
+```{r demog-export}
+demog_paths <- gtsummary_reporter(
+  gts_obj = demog_tbl,
+  file_path = file.path(output_dir, "t-demog.rtf"),
+  output_types = c("TXT", "HTML"),
+  save_rds = TRUE
+)
+
+output_manifest(demog_paths)
+```
+
+### TXT preview
+
+TXT output is useful for checking fixed-width alignment, indentation, page
+titles, footnotes, and line wrapping.
+
+```{r demog-txt-preview, echo = FALSE, comment = ""}
+demog_txt <- path_for_ext(demog_paths, "txt")
+print_text_output(demog_txt)
+```
+
+### HTML preview
+
+HTML output is useful for a quick browser review of proportional-width table
+layout and header styling.
+
+```{r demog-html-preview, echo = FALSE, results = "asis"}
+demog_html <- path_for_ext(demog_paths, "html")
+embed_html_output(demog_html, height = 500)
+```
+
+## Example 2: gtsummary cross-table input
+
+Different `gtsummary` table types use the same export function. This example
+uses `tbl_cross()` to create a treatment-by-grade frequency table.
+
+```{r cross-table}
+cross_tbl <- gtsummary::trial |>
+  dplyr::select(trt, grade) |>
+  gtsummary::tbl_cross(
+    row = grade,
+    col = trt,
+    percent = "row"
+  ) |>
+  gtsummary::modify_spanning_header(
+    gtsummary::all_stat_cols() ~ "**Treatment Group**"
+  )
+
+cross_tbl
+```
+
+```{r cross-export}
+title1 <- "Table 14.1.2 Grade by Treatment"
+title2 <- "Safety Population"
+footnote1 <- "Percentages are row percentages."
+progname <- "programs/t-grade-cross.R"
+
+cross_paths <- gtsummary_reporter(
+  gts_obj = cross_tbl,
+  file_path = file.path(output_dir, "t-grade-cross.rtf"),
+  output_types = c("TXT", "HTML"),
+  save_rds = FALSE
+)
+
+output_manifest(cross_paths)
+```
+
+### TXT preview
+
+```{r cross-txt-preview, echo = FALSE, comment = ""}
+cross_txt <- path_for_ext(cross_paths, "txt")
+print_text_output(cross_txt)
+```
+
+### HTML preview
+
+```{r cross-html-preview, echo = FALSE, results = "asis"}
+cross_html <- path_for_ext(cross_paths, "html")
+embed_html_output(cross_html, height = 420)
+```
+
+## Example 3: plain data frame input
+
+Use a plain data frame when the table has already been assembled outside
+`gtsummary`, for example from a validated analysis data set or a custom summary
+program. In this mode, provide report labels and spanning headers explicitly,
+because there is no `gtsummary` styling metadata to read.
+
+```{r ae-data-frame}
+ae_tbl <- data.frame(
+  label = c(
+    "Serious adverse events",
+    "  Subjects with at least one event",
+    "  Events leading to study drug interruption",
+    "Treatment-emergent adverse events",
+    "  Headache",
+    "  Nausea",
+    "  Alanine aminotransferase increased"
+  ),
+  placebo = c("", "2 (10.0%)", "1 (5.0%)", "", "6 (30.0%)", "4 (20.0%)", "1 (5.0%)"),
+  active_low = c("", "1 (5.0%)", "0", "", "5 (25.0%)", "3 (15.0%)", "2 (10.0%)"),
+  active_high = c("", "3 (15.0%)", "2 (10.0%)", "", "7 (35.0%)", "5 (25.0%)", "3 (15.0%)"),
+  total = c("", "6 (10.0%)", "3 (5.0%)", "", "18 (30.0%)", "12 (20.0%)", "6 (10.0%)"),
+  stringsAsFactors = FALSE
+)
+
+ae_tbl
+```
+
+```{r ae-export}
+title1 <- "Table 14.3.1 Overview of Adverse Events"
+title2 <- "Safety Population"
+footnote1 <- "Events are counted once per subject within each row."
+progname <- "programs/t-ae-overview.R"
+
+ae_paths <- gtsummary_reporter(
+  gts_obj = ae_tbl,
+  file_path = file.path(output_dir, "t-ae-overview.rtf"),
+  column_labels = c(
+    label = "System Organ Class / Preferred Term",
+    placebo = "Placebo",
+    active_low = "Active Low",
+    active_high = "Active High",
+    total = "Total"
+  ),
+  spanning_headers = data.frame(
+    from = "placebo",
+    to = "total",
+    label = "Treatment Group"
+  ),
+  output_types = c("TXT", "HTML"),
+  save_rds = FALSE
+)
+
+output_manifest(ae_paths)
+```
+
+### TXT preview
+
+```{r ae-txt-preview, echo = FALSE, comment = ""}
+ae_txt <- path_for_ext(ae_paths, "txt")
+print_text_output(ae_txt)
+```
+
+### HTML preview
+
+```{r ae-html-preview, echo = FALSE, results = "asis"}
+ae_html <- path_for_ext(ae_paths, "html")
+embed_html_output(ae_html, height = 440)
+```
+
+## Example 4: controlling column widths
+
+The same table can look very different depending on the width controls. Start
+with automatic widths, then use `max_table_width` or `column_widths` when the
+report shell requires a specific layout.
+
+### Automatic widths
+
+With no width overrides, `derrick` estimates each display column from the table
+content and the available page width.
+
+```{r ae-width-auto}
+title1 <- "Table 14.3.1 Overview of Adverse Events"
+title2 <- "Automatic column widths"
+footnote1 <- "This version lets derrick estimate the width of each column."
+progname <- "programs/t-ae-overview.R"
+
+ae_auto_paths <- gtsummary_reporter(
+  gts_obj = ae_tbl,
+  file_path = file.path(output_dir, "t-ae-auto.rtf"),
+  column_labels = c(
+    label = "System Organ Class / Preferred Term",
+    placebo = "Placebo",
+    active_low = "Active Low",
+    active_high = "Active High",
+    total = "Total"
+  ),
+  spanning_headers = data.frame(
+    from = "placebo",
+    to = "total",
+    label = "Treatment Group"
+  ),
+  output_types = "TXT",
+  save_rds = FALSE
+)
+
+basename(ae_auto_paths)
+```
+
+```{r ae-width-auto-preview, echo = FALSE, comment = ""}
+print_text_output(path_for_ext(ae_auto_paths, "txt"))
+```
+
+### Narrow max_table_width
+
+`max_table_width` caps the whole table. A narrower width forces long labels to
+wrap sooner and leaves less room for treatment columns.
+
+```{r ae-width-narrow}
+title1 <- "Table 14.3.1 Overview of Adverse Events"
+title2 <- "Narrow table width"
+footnote1 <- "This version caps the total table width at 5.5 inches."
+progname <- "programs/t-ae-overview.R"
+
+ae_narrow_paths <- gtsummary_reporter(
+  gts_obj = ae_tbl,
+  file_path = file.path(output_dir, "t-ae-narrow.rtf"),
+  column_labels = c(
+    label = "System Organ Class / Preferred Term",
+    placebo = "Placebo",
+    active_low = "Active Low",
+    active_high = "Active High",
+    total = "Total"
+  ),
+  spanning_headers = data.frame(
+    from = "placebo",
+    to = "total",
+    label = "Treatment Group"
+  ),
+  max_table_width = 5.5,
+  output_types = "TXT",
+  save_rds = FALSE
+)
+
+basename(ae_narrow_paths)
+```
+
+```{r ae-width-narrow-preview, echo = FALSE, comment = ""}
+print_text_output(path_for_ext(ae_narrow_paths, "txt"))
+```
+
+### Manual column_widths
+
+`column_widths` assigns widths in display-column order. For this data frame,
+the order is `label`, `placebo`, `active_low`, `active_high`, and `total`.
+Manual widths are useful when the label column needs more space than the
+automatic estimate provides.
+
+```{r ae-width-manual}
+title1 <- "Table 14.3.1 Overview of Adverse Events"
+title2 <- "Manual column widths"
+footnote1 <- "This version gives more room to the label column."
+progname <- "programs/t-ae-overview.R"
+
+ae_manual_paths <- gtsummary_reporter(
+  gts_obj = ae_tbl,
+  file_path = file.path(output_dir, "t-ae-manual.rtf"),
+  column_labels = c(
+    label = "System Organ Class / Preferred Term",
+    placebo = "Placebo",
+    active_low = "Active Low",
+    active_high = "Active High",
+    total = "Total"
+  ),
+  spanning_headers = data.frame(
+    from = "placebo",
+    to = "total",
+    label = "Treatment Group"
+  ),
+  column_widths = "3.8|1.1|1.3|1.3|1.1",
+  output_types = "TXT",
+  save_rds = FALSE
+)
+
+basename(ae_manual_paths)
+```
+
+```{r ae-width-manual-preview, echo = FALSE, comment = ""}
+print_text_output(path_for_ext(ae_manual_paths, "txt"))
+```
+
+## Example 5: manual pagination
+
+By default, `rows_per_page = NULL` leaves pagination to `reporter`. Set
+`rows_per_page` when a table shell requires predictable manual chunks before
+the report is written. The example below expands the adverse event table and
+starts a new page after every seven data rows.
+
+```{r ae-pagination-data}
+paged_ae_tbl <- rbind(
+  ae_tbl,
+  data.frame(
+    label = c(
+      "Skin and subcutaneous tissue disorders",
+      "  Rash",
+      "  Pruritus",
+      "Respiratory, thoracic and mediastinal disorders",
+      "  Cough",
+      "  Oropharyngeal pain",
+      "Gastrointestinal disorders",
+      "  Diarrhea",
+      "  Abdominal pain",
+      "Investigations",
+      "  Blood creatine phosphokinase increased"
+    ),
+    placebo = c(
+      "", "2 (10.0%)", "1 (5.0%)", "", "3 (15.0%)", "1 (5.0%)",
+      "", "2 (10.0%)", "1 (5.0%)", "", "1 (5.0%)"
+    ),
+    active_low = c(
+      "", "3 (15.0%)", "1 (5.0%)", "", "2 (10.0%)", "2 (10.0%)",
+      "", "4 (20.0%)", "2 (10.0%)", "", "2 (10.0%)"
+    ),
+    active_high = c(
+      "", "4 (20.0%)", "2 (10.0%)", "", "5 (25.0%)", "2 (10.0%)",
+      "", "5 (25.0%)", "3 (15.0%)", "", "4 (20.0%)"
+    ),
+    total = c(
+      "", "9 (15.0%)", "4 (6.7%)", "", "10 (16.7%)", "5 (8.3%)",
+      "", "11 (18.3%)", "6 (10.0%)", "", "7 (11.7%)"
+    ),
+    stringsAsFactors = FALSE
+  )
+)
+
+nrow(paged_ae_tbl)
+```
+
+```{r ae-pagination-export}
+title1 <- "Table 14.3.2 Adverse Events by Body System"
+title2 <- "Manual pagination"
+footnote1 <- "This version starts a new report page after every seven data rows."
+progname <- "programs/t-ae-paged.R"
+
+paged_paths <- gtsummary_reporter(
+  gts_obj = paged_ae_tbl,
+  file_path = file.path(output_dir, "t-ae-paged.rtf"),
+  column_labels = c(
+    label = "System Organ Class / Preferred Term",
+    placebo = "Placebo",
+    active_low = "Active Low",
+    active_high = "Active High",
+    total = "Total"
+  ),
+  spanning_headers = data.frame(
+    from = "placebo",
+    to = "total",
+    label = "Treatment Group"
+  ),
+  rows_per_page = 7,
+  output_types = c("TXT", "HTML"),
+  save_rds = FALSE
+)
+
+output_manifest(paged_paths)
+```
+
+### TXT preview
+
+TXT output repeats the title, table header, footnote, and footer after each
+manual page break.
+
+```{r ae-pagination-txt-preview, echo = FALSE, comment = ""}
+print_text_output(path_for_ext(paged_paths, "txt"))
+```
+
+### HTML preview
+
+```{r ae-pagination-html-preview, echo = FALSE, results = "asis"}
+paged_html <- path_for_ext(paged_paths, "html")
+embed_html_output(paged_html, height = 520)
+```
+
+## Common layout controls
+
+These arguments are the main controls to review when moving from a draft table
+to a production report shell:
+
+- `output_types` chooses the files to write. This vignette runs TXT and HTML
+  because they can be rendered directly inside an HTML page.
+- `column_labels` overrides displayed headers for plain data frames or
+  special sponsor wording.
+- `spanning_headers` adds or overrides multi-column headers.
+- `max_table_width` caps the total table width.
+- `column_widths` controls exact column allocation.
+- `max_chars_per_line` constrains TXT output to a known character budget.
+- `rows_per_page` forces manual chunks before `reporter` writes the report;
+  leave it `NULL` when reporter's automatic pagination is sufficient.
+
+```{r layout-template, eval = FALSE}
+gtsummary_reporter(
+  gts_obj = ae_tbl,
+  file_path = file.path(output_dir, "t-ae-final.rtf"),
+  column_labels = c(
+    label = "System Organ Class / Preferred Term",
+    placebo = "Placebo",
+    active_low = "Active Low",
+    active_high = "Active High",
+    total = "Total"
+  ),
+  spanning_headers = data.frame(
+    from = "placebo",
+    to = "total",
+    label = "Treatment Group"
+  ),
+  column_widths = "3.8|1.1|1.3|1.3|1.1",
+  max_chars_per_line = 132,
+  rows_per_page = 24,
+  output_types = c("RTF", "TXT", "HTML")
+)
+```
+
+## Output checklist
+
+Before treating generated files as final, check that:
+
+- the source table type is intentional (`gtsummary` object or plain data
+  frame);
+- all requested report formats were written;
+- title, footnote, and footer metadata are present;
+- label indentation is preserved after wrapping;
+- spanning headers cover the intended display columns;
+- the chosen widths fit the page setup and TXT character budget;
+- manual page breaks occur at the intended row boundaries, if
+  `rows_per_page` is used;
+- saved RDS data matches the rows and columns sent to `reporter`.

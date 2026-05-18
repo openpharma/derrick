@@ -91,8 +91,8 @@ or list with fields \code{from}, \code{to}, and \code{label}.}
 
 \item{indent_unit}{Number of spaces per indent level in \code{label}.}
 
-\item{output_types}{Output types to write; supported values are \code{"RTF"} and
-\code{"TXT"}.}
+\item{output_types}{Output types to write; supported values are \code{"RTF"},
+\code{"TXT"}, \code{"DOCX"}, \code{"PDF"}, and \code{"HTML"}.}
 
 \item{save_rds}{Logical; when \code{TRUE}, save processed output data and ARD
 object (if available) as \code{.rds} files.}
@@ -124,9 +124,10 @@ A character vector containing generated output file paths.
 }
 \description{
 Convert a \code{gtsummary} object (or a plain \code{data.frame}) into a \code{reporter}
-table and write RTF and/or TXT outputs. The function is designed for
-clinical reporting workflows and supports column labels, spanning headers,
-pagination, indentation handling, and optional export of intermediate data.
+table and write RTF, TXT, DOCX, PDF, and/or HTML outputs. The function is
+designed for clinical reporting workflows and supports column labels,
+spanning headers, pagination, indentation handling, and optional export of
+intermediate data.
 
 Environment variables are automatically consumed when available:
 \code{title1}-\code{title9}, \code{footnote1}-\code{footnote9}, and \code{progname}.

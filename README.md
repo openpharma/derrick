@@ -1,46 +1,31 @@
 # derrick
 
-![GitHub forks](https://img.shields.io/github/forks/openpharma/derrick?style=social)
-![GitHub Repo stars](https://img.shields.io/github/stars/openpharma/derrick?style=social)
-
-![GitHub commit activity](https://img.shields.io/github/commit-activity/m/openpharma/derrick)
-![GitHub contributors](https://img.shields.io/github/contributors/openpharma/derrick)
-![GitHub last commit](https://img.shields.io/github/last-commit/openpharma/derrick)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/openpharma/derrick)
-![GitHub repo size](https://img.shields.io/github/repo-size/openpharma/derrick)
-![GitHub language count](https://img.shields.io/github/languages/count/openpharma/derrick)
-[![Project Status: Active - The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
-[![Downloads](https://img.shields.io/github/downloads/openpharma/derrick/latest/total)](https://tooomm.github.io/github-release-stats/?username=openpharma\&repository=derrick)
-[![Current Version](https://img.shields.io/github/r-package/v/openpharma/derrick/main?color=purple\&label=package%20version)](https://github.com/openpharma/derrick/tree/main)
-[![Open Issues](https://img.shields.io/github/issues-raw/openpharma/derrick?color=red\&label=open%20issues)](https://github.com/openpharma/derrick/issues?q=is%3Aissue+is%3Aopen+sort%3Aupdated-desc)
-
+[![Project Status: Active](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 [![BiocCheck](https://github.com/openpharma/derrick/actions/workflows/bioccheck.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/bioccheck.yaml)
+[![Current Version](https://img.shields.io/github/r-package/v/openpharma/derrick/main?color=purple&label=package%20version)](https://github.com/openpharma/derrick/tree/main)
+[![Open Issues](https://img.shields.io/github/issues-raw/openpharma/derrick?color=red&label=open%20issues)](https://github.com/openpharma/derrick/issues?q=is%3Aissue+is%3Aopen+sort%3Aupdated-desc)
 
-`derrick` converts `gtsummary` tables and plain data frames into
-clinical-style `reporter` RTF and TXT outputs. The main entry point is
-`gtsummary_reporter()`.
+`derrick` is a focused export layer for clinical tables. Build an analysis
+table with `gtsummary` or a plain data frame, then use `gtsummary_reporter()`
+to write consistent `reporter` RTF, TXT, DOCX, PDF, and HTML outputs.
 
-The package focuses on the output details that usually matter for clinical
-tables:
+The package is designed for the output details that usually slow down clinical
+reporting work:
 
-- controlled page geometry and column widths
-- `gtsummary` labels, indentation, p-values, and spanning headers
-- RTF and fixed-width TXT outputs from the same table specification
-- optional titles, footnotes, and footer program/date metadata
-- optional processed data and ARD RDS exports
-- reporter-managed pagination by default, with manual row chunks available
-  when explicitly requested
+- one table specification can produce RTF, TXT, DOCX, PDF, and HTML files;
+- `gtsummary` labels, p-values, indentation, and spanning headers are carried
+  into the report output;
+- page geometry, margins, column widths, and TXT character budgets can be
+  controlled explicitly;
+- titles, footnotes, program names, timestamps, and optional RDS exports are
+  handled in one call.
 
 ## Installation
-
-Install from GitHub:
 
 ```r
 install.packages("remotes")
 remotes::install_github("openpharma/derrick")
 ```
-
-Load the package:
 
 ```r
 library(derrick)
@@ -48,51 +33,24 @@ library(derrick)
 
 ## Quick Start
 
-`gtsummary_reporter()` accepts either a `gtsummary` object or a plain
-`data.frame`. The output file extension in `file_path` is used only to define
-the base name; files are written according to `output_types`.
+The main workflow is:
 
-```r
-library(derrick)
-
-tbl <- data.frame(
-  label = c("Age", "  Mean (SD)", "Sex", "  Female"),
-  stat_1 = c("", "42.1 (12.3)", "", "10 (50.0%)"),
-  stat_2 = c("", "43.8 (11.9)", "", "12 (60.0%)"),
-  stringsAsFactors = FALSE
-)
-
-paths <- gtsummary_reporter(
-  gts_obj = tbl,
-  file_path = "outputs/demographics.rtf",
-  output_types = c("RTF", "TXT"),
-  save_rds = FALSE
-)
-
-paths
-```
-
-This writes:
-
-- `outputs/demographics.rtf`
-- `outputs/demographics.txt`
-
-## gtsummary Example
-
-The function reads `table_body` and `table_styling` from a `gtsummary` object,
-including visible columns, labels, indentation rules, p-value columns, and
-spanning header metadata.
+1. create or receive a `gtsummary` table;
+2. set optional report metadata in the caller environment;
+3. call `gtsummary_reporter()` with the required output formats.
 
 ```r
 library(dplyr)
 library(gtsummary)
 library(derrick)
 
+dir.create("outputs", showWarnings = FALSE)
+
 title1 <- "Table 14.1 Summary of Demographics"
 footnote1 <- "Percentages are based on the number of subjects in each treatment group."
 progname <- "programs/t-demog.R"
 
-gts_tbl <- gtsummary::trial |>
+tbl <- gtsummary::trial |>
   dplyr::select(trt, age, grade) |>
   gtsummary::tbl_summary(by = trt) |>
   gtsummary::add_p() |>
@@ -101,215 +59,84 @@ gts_tbl <- gtsummary::trial |>
   )
 
 paths <- gtsummary_reporter(
-  gts_obj = gts_tbl,
+  gts_obj = tbl,
   file_path = "outputs/t-demog.rtf",
-  output_types = c("RTF", "TXT"),
+  output_types = c("RTF", "TXT", "DOCX", "PDF", "HTML"),
   save_rds = TRUE
 )
+
+paths
 ```
 
-The following variables are read from the caller's environment when present:
+This writes `outputs/t-demog.rtf`, `outputs/t-demog.txt`,
+`outputs/t-demog.docx`, `outputs/t-demog.pdf`, and `outputs/t-demog.html`.
+With `save_rds = TRUE`, the processed output data is also saved beside the
+report, and ARD data is saved when it can be extracted from the input table.
 
-- `title1` through `title9`
-- `footnote1` through `footnote9`
-- `progname`
+## What derrick Preserves
 
-Titles and footnotes are wrapped to the active page width before the report is
-written. `progname` is included in the right side of the page footer with the
-current date and time.
+For `gtsummary` inputs, `derrick` reads both `table_body` and `table_styling`.
+That means the exported report can use the visible column order, display
+labels, row indentation rules, p-value columns, and spanning header metadata
+already defined by the analysis table.
 
-## Main Arguments
-
-| Argument | Purpose |
-| --- | --- |
-| `gts_obj` | A `gtsummary` object or plain `data.frame`. |
-| `file_path` | Output base path. `.rtf` and/or `.txt` are generated from this base. |
-| `output_types` | Any combination of `"RTF"` and `"TXT"`. |
-| `max_table_width` | Optional total table width cap in `report_units`. `NULL` uses the full printable page width. |
-| `column_widths` | Optional manual widths in display-column order, as a numeric vector or pipe-delimited string. |
-| `max_chars_per_line` | Optional TXT character budget. Converted to width using 12 characters per inch. |
-| `rows_per_page` | Optional manual row chunk size. Leave `NULL` to use reporter's own pagination. |
-| `column_labels` | Optional display labels, usually a named vector or a data frame with `column` and `label`. |
-| `spanning_headers` | Optional manual spanning header definitions with `from`, `to`, and `label`. |
-| `group_columns` | Optional grouping columns to hide and use for `blank_after`. |
-| `save_rds` | Save processed table data and, when available, ARD data next to the output file. |
-
-`rds_dir` is kept as a reserved compatibility argument. RDS files are currently
-written beside `file_path` using the output base name.
-
-## Width Parameters
-
-`gtsummary_reporter()` interprets `max_table_width`, `min_col_width`,
-`column_widths`, and `report_margins` in `report_units`. The effective page
-width is:
+Plain data frames are also supported when the table has already been assembled:
 
 ```r
-page_width - left_margin - right_margin
-```
-
-Width resolution follows this order:
-
-1. Determine the printable page width from `report_paper_size`,
-   `report_orientation`, `report_units`, and `report_margins`.
-2. Use the full printable width when `max_table_width = NULL`; otherwise cap
-   the requested value at the printable width.
-3. If `max_chars_per_line` is supplied, convert it to physical width using
-   12 characters per inch and apply the stricter limit.
-4. Compute automatic widths from data and headers, or apply manual
-   `column_widths`.
-5. Scale columns down when their total is wider than the effective table width.
-
-With default margins, the common effective page widths are:
-
-| `report_paper_size` | `report_orientation` | inches | cm |
-| --- | --- | ---: | ---: |
-| `"letter"` | `"landscape"` | 9.00 | 22.86 |
-| `"letter"` | `"portrait"` | 6.50 | 16.51 |
-| `"legal"` | `"landscape"` | 12.00 | 30.48 |
-| `"legal"` | `"portrait"` | 6.50 | 16.51 |
-| `"A4"` | `"landscape"` | 9.69 | 24.62 |
-| `"A4"` | `"portrait"` | 6.27 | 15.92 |
-| `"RD4"` | `"landscape"` | 8.70 | 22.22 |
-| `"RD4"` | `"portrait"` | 5.70 | 14.52 |
-
-Use `max_table_width = NULL` unless you intentionally want a narrower table.
-Values above the printable page width are capped automatically. If margins
-exceed the physical page width, the effective width becomes `0`.
-
-## Manual Column Widths
-
-Manual `column_widths` are applied in display-column order. For most
-`gtsummary` tables this means the `label` column first, followed by statistic
-or data columns.
-
-For the default 9-inch landscape letter page:
-
-```r
-gtsummary_reporter(
-  gts_obj = tbl,
-  file_path = "outputs/table.rtf",
-  column_widths = "3|2|2|2",
-  output_types = c("RTF", "TXT")
+tbl_df <- data.frame(
+  label = c("Age", "  Mean (SD)", "Sex", "  Female"),
+  stat_1 = c("", "42.1 (12.3)", "", "10 (50.0%)"),
+  stat_2 = c("", "43.8 (11.9)", "", "12 (60.0%)"),
+  stringsAsFactors = FALSE
 )
-```
 
-Common starting points:
-
-| Columns | Example `column_widths` | Total |
-| ---: | --- | ---: |
-| 3 | `"3|3|3"` | 9.0 |
-| 4 | `"3|2|2|2"` | 9.0 |
-| 5 | `"3|1.5|1.5|1.5|1.5"` | 9.0 |
-| 6 | `"2.5|1.3|1.3|1.3|1.3|1.3"` | 9.0 |
-
-The practical total range is `n_cols * min_col_width` through the effective
-`max_table_width`. If the supplied total is larger, widths are scaled down. If
-`n_cols * min_col_width` is wider than the page, the per-column floor is
-relaxed to `effective_width / n_cols`.
-
-When fewer widths are supplied than display columns, the last value is repeated.
-When more widths are supplied, extras are ignored.
-
-## Column Labels and Spanning Headers
-
-Use `column_labels` to override display headers:
-
-```r
 gtsummary_reporter(
-  gts_obj = tbl,
-  file_path = "outputs/table.rtf",
-  column_labels = c(
-    label = "Visit / Statistic",
-    stat_1 = "Placebo",
-    stat_2 = "Active"
-  )
-)
-```
-
-Use `spanning_headers` when you need explicit spans or when the input is a
-plain data frame:
-
-```r
-gtsummary_reporter(
-  gts_obj = tbl,
-  file_path = "outputs/table.rtf",
+  gts_obj = tbl_df,
+  file_path = "outputs/simple-table.rtf",
+  output_types = c("RTF", "TXT", "HTML"),
+  column_labels = c(label = "Characteristic", stat_1 = "Placebo", stat_2 = "Active"),
   spanning_headers = data.frame(
     from = "stat_1",
     to = "stat_2",
-    label = "Treatment Group",
-    stringsAsFactors = FALSE
+    label = "Treatment Group"
   )
 )
 ```
 
-For `gtsummary` inputs, existing `table_styling$spanning_header` metadata is
-used when `spanning_headers = NULL`.
+## Layout Controls
 
-## Pagination
+Use defaults first. By default, `derrick` uses the printable page width from
+the selected paper size, orientation, units, and margins, then scales columns
+down only when needed.
 
-By default, `rows_per_page = NULL` leaves pagination to `reporter`.
-`reporter::write_report()` computes page breaks from the selected output
-format, fixed page metrics, and the actual wrapped title, header, row, and
-footnote line counts.
+| Argument | Use when |
+| --- | --- |
+| `output_types` | You need one or more of `"RTF"`, `"TXT"`, `"DOCX"`, `"PDF"`, or `"HTML"`. |
+| `max_table_width` | You need a table narrower than the printable page. |
+| `column_widths` | You need exact column allocation, e.g. `"3|2|2|2"`. |
+| `max_chars_per_line` | TXT output must fit a fixed character budget, such as 132 columns. |
+| `report_orientation`, `report_paper_size`, `report_margins` | The table must match a specific page setup. |
+| `rows_per_page` | You need manual row chunks before `reporter` writes the final files. |
 
-Use `rows_per_page` only when you need manual pre-splitting:
+Reporter-managed pagination is used by default. Leave `rows_per_page = NULL`
+unless a table needs fixed row chunks for a specific deliverable.
 
-```r
-gtsummary_reporter(
-  gts_obj = tbl,
-  file_path = "outputs/table.rtf",
-  rows_per_page = 24
-)
-```
+## Metadata and Diagnostics
 
-Manual chunks are added to the same report with page breaks between chunks.
-Reporter still writes the final RTF/TXT output after the chunks are assembled.
+`gtsummary_reporter()` automatically looks for `title1` through `title9`,
+`footnote1` through `footnote9`, and `progname` in the caller environment.
+Titles and footnotes are wrapped to the active page width before the report is
+written.
 
-## Group Columns and Blank Lines
-
-When `group_blank_after = TRUE`, columns named like `group1_level`,
-`group2_level`, and so on are hidden and used with reporter's `blank_after`
-behavior. You can override the grouping columns explicitly:
+For layout validation, use:
 
 ```r
-gtsummary_reporter(
-  gts_obj = tbl,
-  file_path = "outputs/table.rtf",
-  group_columns = c("group1_level"),
-  group_blank_after = TRUE
-)
+gtsummary_reporter(tbl, "outputs/check.rtf", debug_indent = TRUE)
+gtsummary_reporter(tbl, "outputs/check.rtf", debug_spanning = TRUE)
 ```
 
-Set `group_blank_after = FALSE` when grouping columns should not be used for
-blank-line behavior.
+## Learn More
 
-## Output Files
-
-The function returns a character vector of generated file paths.
-
-```r
-paths <- gtsummary_reporter(
-  gts_obj = tbl,
-  file_path = "outputs/table.rtf",
-  output_types = c("RTF", "TXT"),
-  save_rds = TRUE
-)
-```
-
-With `save_rds = TRUE`, the function also writes:
-
-- `<base>_output_data.rds`: the processed data sent to reporter
-- `<base>_ard.rds`: ARD data when it can be gathered from the input object
-
-If ARD extraction is unavailable, the report is still generated and a message
-is printed.
-
-## Diagnostics
-
-Use these flags when validating table layout:
-
-- `debug_indent = TRUE` prints how indentation rules matched table rows.
-- `debug_spanning = TRUE` prints how spanning headers were resolved.
-
-These diagnostics are intended for development and validation, not routine
-production report generation.
+See `vignettes/clinical-table-workflow.Rmd` for the draft end-to-end workflow,
+including column width strategy, plain data frame inputs, pagination choices,
+and troubleshooting notes.

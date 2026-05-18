@@ -239,6 +239,37 @@ test_that("normalize_reporter_paper_size accepts reporter aliases", {
   expect_equal(derrick:::normalize_reporter_paper_size(c(7, 10)), c(7, 10))
 })
 
+test_that("supported_output_types lists all reporter output formats", {
+  expect_equal(
+    derrick:::supported_output_types(),
+    c("RTF", "TXT", "DOCX", "PDF", "HTML")
+  )
+})
+
+test_that("normalize_output_types normalizes case, whitespace, and duplicates", {
+  res <- derrick:::normalize_output_types(c(" rtf ", "txt", "DOCX", "pdf", "html", "RTF"))
+  expect_equal(res, c("RTF", "TXT", "DOCX", "PDF", "HTML"))
+})
+
+test_that("normalize_output_types rejects empty and unsupported values", {
+  expect_error(
+    derrick:::normalize_output_types(character(0)),
+    "at least one supported output type"
+  )
+  expect_error(
+    derrick:::normalize_output_types(c("RTF", "CSV")),
+    "Unsupported `output_types`: CSV"
+  )
+})
+
+test_that("output_file_extension maps output types to generated extensions", {
+  expect_equal(derrick:::output_file_extension("RTF"),  "rtf")
+  expect_equal(derrick:::output_file_extension("TXT"),  "txt")
+  expect_equal(derrick:::output_file_extension("DOCX"), "docx")
+  expect_equal(derrick:::output_file_extension("PDF"),  "pdf")
+  expect_equal(derrick:::output_file_extension("HTML"), "html")
+})
+
 test_that("get_paper_dims returns named paper dimensions in inches", {
   dims <- derrick:::get_paper_dims("letter", "inches")
   expect_equal(dims, c(8.5, 11))
@@ -553,6 +584,56 @@ test_that("resolve_span_index returns NULL for out-of-bounds", {
   expect_null(derrick:::resolve_span_index(5, c("a", "b")))
 })
 
+test_that("apply_spanning_headers bolds reporter spanning headers by default", {
+  skip_if_not_installed("reporter")
+
+  df <- data.frame(label = "Row", stat_1 = "1", stat_2 = "2")
+  tbl <- reporter::create_table(df)
+  span_use <- data.frame(
+    from = "stat_1",
+    to = "stat_2",
+    label = "Treatment",
+    stringsAsFactors = FALSE
+  )
+
+  out <- derrick:::apply_spanning_headers(
+    tbl_obj = tbl,
+    span_use = span_use,
+    ordered_cols = names(df),
+    spanning_header_fn = reporter::spanning_header
+  )
+
+  expect_length(out$col_spans, 1)
+  expect_equal(out$col_spans[[1]]$label, "Treatment")
+  expect_true(out$col_spans[[1]]$bold)
+})
+
+test_that("build_table_spec creates bold column headers by default", {
+  skip_if_not_installed("reporter")
+
+  df <- data.frame(label = "Row", stat_1 = "1")
+  col_map <- data.frame(
+    column = "stat_1",
+    label = "Drug A",
+    stringsAsFactors = FALSE
+  )
+
+  out <- derrick:::build_table_spec(
+    df = df,
+    col_widths = c(label = 2, stat_1 = 1),
+    col_map = col_map,
+    cols_to_define = "stat_1",
+    center_cols = "stat_1",
+    label_overrides = list(label = "Characteristic"),
+    group_cols_to_hide = character(0),
+    span_use = NULL,
+    ordered_cols = names(df),
+    spanning_header_fn = reporter::spanning_header
+  )
+
+  expect_true(out$header_bold)
+})
+
 # ---------------------------------------------------------------------------
 test_that("wrap_with_indent returns short text unchanged", {
   expect_equal(derrick:::wrap_with_indent("Short", 40), "Short")
@@ -614,6 +695,30 @@ test_that("compute_report_line_chars uses the strictest requested output", {
   expect_equal(txt_chars, 108)
   expect_gt(rtf_chars, txt_chars)
   expect_equal(both_chars, txt_chars)
+})
+
+test_that("compute_report_line_chars handles DOCX, PDF, and HTML like proportional outputs", {
+  rtf_chars <- derrick:::compute_report_line_chars(
+    width = 9, units = "inches", font_size = 9, output_types = "RTF"
+  )
+  expect_equal(
+    derrick:::compute_report_line_chars(
+      width = 9, units = "inches", font_size = 9, output_types = "DOCX"
+    ),
+    rtf_chars
+  )
+  expect_equal(
+    derrick:::compute_report_line_chars(
+      width = 9, units = "inches", font_size = 9, output_types = "PDF"
+    ),
+    rtf_chars
+  )
+  expect_equal(
+    derrick:::compute_report_line_chars(
+      width = 9, units = "inches", font_size = 9, output_types = "HTML"
+    ),
+    rtf_chars
+  )
 })
 
 # ---------------------------------------------------------------------------

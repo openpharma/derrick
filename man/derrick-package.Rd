@@ -6,9 +6,9 @@
 \alias{derrick-package}
 \title{derrick: Export gtsummary Tables with reporter}
 \description{
-Convert gtsummary tables and plain data frames into clinical-style reporter RTF
-and TXT outputs with controlled widths, pagination, indentation, spanning
-headers, and optional intermediate data exports.
+Convert gtsummary tables and plain data frames into clinical-style reporter
+RTF, TXT, DOCX, PDF, and HTML outputs with controlled widths, pagination,
+indentation, spanning headers, and optional intermediate data exports.
 }
 \seealso{
 Useful links:

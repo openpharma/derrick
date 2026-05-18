@@ -3,9 +3,11 @@
 ### New features
 
 * Add an initializer script.
+* Add DOCX, PDF, and HTML output support to `gtsummary_reporter()`.
 
 ### Enhancements
 
+* Bold spanning headers by default so table headers render consistently.
 * Documentation on how to use the initialize a package.
 
 ### Bug fixes

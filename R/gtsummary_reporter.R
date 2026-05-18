@@ -8,7 +8,7 @@
 #
 # Function arguments (gtsummary_reporter):
 # - gts_obj: gtsummary object or plain data.frame to export
-# - file_path: output path (extension determines RTF/TXT names)
+# - file_path: output path (extension determines generated output names)
 # - max_table_width: max width (inches/cm) for all columns combined. The largest
 #   effective value is the printable page width after subtracting left/right
 #   margins; larger values are automatically capped. With defaults
@@ -35,7 +35,7 @@
 # - report_margins: NULL or named vector/list (top/right/bottom/left)
 # - report_font_size: base font size for table
 # - indent_unit: spaces per indent unit for label column
-# - output_types: c("RTF","TXT") output selection
+# - output_types: output selection; any of RTF, TXT, DOCX, PDF, HTML
 # - save_rds: save processed data and ARD objects as RDS
 # - rds_dir: reserved argument for backward compatibility
 # - rows_per_page: optional manual rows per pre-split chunk (reporter handles
@@ -66,9 +66,10 @@
 #' Export `gtsummary` tables to clinical-style `reporter` outputs
 #'
 #' Convert a `gtsummary` object (or a plain `data.frame`) into a `reporter`
-#' table and write RTF and/or TXT outputs. The function is designed for
-#' clinical reporting workflows and supports column labels, spanning headers,
-#' pagination, indentation handling, and optional export of intermediate data.
+#' table and write RTF, TXT, DOCX, PDF, and/or HTML outputs. The function is
+#' designed for clinical reporting workflows and supports column labels,
+#' spanning headers, pagination, indentation handling, and optional export of
+#' intermediate data.
 #'
 #' Environment variables are automatically consumed when available:
 #' `title1`-`title9`, `footnote1`-`footnote9`, and `progname`.
@@ -144,8 +145,8 @@
 #'   `bottom`, `left`) or numeric length-4 vector.
 #' @param report_font_size Base report font size.
 #' @param indent_unit Number of spaces per indent level in `label`.
-#' @param output_types Output types to write; supported values are `"RTF"` and
-#'   `"TXT"`.
+#' @param output_types Output types to write; supported values are `"RTF"`,
+#'   `"TXT"`, `"DOCX"`, `"PDF"`, and `"HTML"`.
 #' @param save_rds Logical; when `TRUE`, save processed output data and ARD
 #'   object (if available) as `.rds` files.
 #' @param rds_dir Reserved argument for backward compatibility.
@@ -215,6 +216,7 @@ gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
   title         <- strip_md_bold(title)
   footnotes_vec <- strip_md_bold(footnotes_vec)
   report_paper_size <- normalize_reporter_paper_size(report_paper_size)
+  output_types <- normalize_output_types(output_types)
 
   # B. Build indent map ----------------------------------------------------------
   indent_map  <- tibble::tibble(row_id = integer(), indent = integer())
@@ -650,7 +652,6 @@ gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
   }
 
   # G. Footer and output --------------------------------------------------------
-  output_types <- toupper(output_types)
   base_path    <- sub("\\.[^.]+$", "", file_path)
   output_paths <- character(0)
 
@@ -698,22 +699,17 @@ gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
     }
   }
 
-  # G2. Write RTF / TXT ---------------------------------------------------------
-  if ("RTF" %in% output_types) {
-    rtf_path <- paste0(base_path, ".rtf")
-    rpt %>%
-      reporter::page_footer(right = footer_right) %>%
-      reporter::write_report(rtf_path, output_type = "RTF")
-    output_paths <- c(output_paths, rtf_path)
-  }
+  # G2. Write requested report formats -----------------------------------------
+  for (output_type in output_types) {
+    output_path <- paste0(base_path, ".", output_file_extension(output_type))
+    rpt_out <- reporter::page_footer(rpt, right = footer_right)
 
-  if ("TXT" %in% output_types) {
-    txt_path <- paste0(base_path, ".txt")
-    rpt %>%
-      reporter::page_footer(right = footer_right) %>%
-      reporter::options_fixed(uchar = "_") %>%
-      reporter::write_report(txt_path, output_type = "TXT")
-    output_paths <- c(output_paths, txt_path)
+    if (identical(output_type, "TXT")) {
+      rpt_out <- reporter::options_fixed(rpt_out, uchar = "_")
+    }
+
+    reporter::write_report(rpt_out, output_path, output_type = output_type)
+    output_paths <- c(output_paths, output_path)
   }
 
   message(paste("Report generated at:", paste(output_paths, collapse = ", ")))
