@@ -16,6 +16,7 @@ devel/*
 doc
 docs
 inst/outputs/*
+tests/testthat/outputs/*
 logs
 Meta
 packrat/lib*/

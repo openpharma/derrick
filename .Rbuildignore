@@ -10,6 +10,7 @@ SECURITY.md
 ^\.claude$
 ^.*\.Rcheck$
 ^.*\.tar\.gz$
+^tests/testthat/outputs$
 README.*
 ^\.lintr$
 ^staged_dependencies\.yaml$
