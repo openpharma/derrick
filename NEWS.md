@@ -2,7 +2,7 @@
 
 ### New features
 
-* Add an initializer script.
+* Add an initialized script.
 * Add DOCX, PDF, and HTML output support to `gtsummary_reporter()`.
 
 ### Enhancements
