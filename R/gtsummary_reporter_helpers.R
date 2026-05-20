@@ -492,7 +492,7 @@ normalize_spanning_headers <- function(x) {
 }
 
 #' Convert a gtsummary `table_styling$spanning_header` tibble to the
-#' `from` / `to` / `label` data frame expected by [apply_spanning_headers()]
+#' `from` / `to` / `label` data frame expected by `apply_spanning_headers()`
 #'
 #' gtsummary stores one row per column (fields: `column`, `spanning_header`,
 #' `level`, `remove`).  This function collapses consecutive columns that share
@@ -716,7 +716,7 @@ apply_spanning_headers <- function(tbl_obj, span_use, ordered_cols,
 #' @param span_use         Normalised spanning-header spec or `NULL`.
 #' @param ordered_cols     Column names in display order.
 #' @param spanning_header_fn  `reporter::spanning_header` or `NULL`.
-#' @param debug_spanning   Logical; passed to [apply_spanning_headers()].
+#' @param debug_spanning   Logical; passed to `apply_spanning_headers()`.
 #' @noRd
 build_table_spec <- function(df, col_widths, col_map, cols_to_define, center_cols,
                               label_overrides, group_cols_to_hide,

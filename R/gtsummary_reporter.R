@@ -162,7 +162,7 @@
 #'
 #' @return A character vector containing generated output file paths.
 #'
-#' @examplesIf requireNamespace("reporter", quietly = TRUE)
+#' @examplesIf requireNamespace("reporter", quietly = TRUE) & requireNamespace("gtsummary", quietly = TRUE)
 #' gts_tbl <- gtsummary::trial |>
 #'   dplyr::select(trt, age, grade) |>
 #'   gtsummary::tbl_summary(by = trt) |>

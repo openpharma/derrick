@@ -4,11 +4,10 @@
 \name{derrick-package}
 \alias{derrick}
 \alias{derrick-package}
-\title{derrick: Export gtsummary Tables with reporter}
+\title{Export gtsummary tables with reporter}
 \description{
-Convert gtsummary tables and plain data frames into clinical-style reporter
-RTF, TXT, DOCX, PDF, and HTML outputs with controlled widths, pagination,
-indentation, spanning headers, and optional intermediate data exports.
+Convert \code{gtsummary} tables and plain data frames into clinical-style
+\code{reporter} RTF, TXT, DOCX, PDF, and HTML outputs.
 }
 \seealso{
 Useful links:
@@ -19,13 +18,12 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Joe Zhu \email{sha.joe.zhu@gmail.com}
+\strong{Maintainer}: Xiecheng Gu \email{xiecheng.gu@boehringer-ingelheim.com}
 
 Authors:
 \itemize{
-  \item Xiecheng Gu
   \item Joe Zhu \email{sha.joe.zhu@gmail.com}
-  \item Bill Huang
+  \item Bill Huang \email{Bill.Huang@Toastmasters.org.tw}
 }
 
 }
