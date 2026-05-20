@@ -130,7 +130,8 @@ A typical workflow is:
 2. Define report metadata such as `title1`, `footnote1`, and `progname`.
 3. Call `derrick::gtsummary_reporter()` with the table, output path, layout
    arguments, and requested `output_types`.
-4. Inspect the generated files and adjust widths or pagination when needed.
+4. Inspect the generated files and add manual widths or pagination only when
+   needed.
 
 The examples below write TXT and HTML outputs so the results can be displayed
 inside this HTML vignette. Use the same table specification with
@@ -340,18 +341,19 @@ embed_html_output(ae_html, height = 440)
 ## Example 4: controlling column widths
 
 The same table can look very different depending on the width controls. Start
-with automatic widths, then use `max_table_width` or `column_widths` when the
-report shell requires a specific layout.
+with reporter-managed automatic widths, then use `max_table_width` or
+`column_widths` when the report shell requires a specific layout.
 
 ### Automatic widths
 
-With no width overrides, `derrick` estimates each display column from the table
-content and the available page width.
+With no width overrides, `derrick` passes no column widths to `reporter`.
+`reporter` then estimates the display columns from the target output format,
+font settings, headers, table content, and available page width.
 
 ```{r ae-width-auto}
 title1 <- "Table 14.3.1 Overview of Adverse Events"
 title2 <- "Automatic column widths"
-footnote1 <- "This version lets derrick estimate the width of each column."
+footnote1 <- "This version lets reporter estimate the width of each column."
 progname <- "programs/t-ae-overview.R"
 
 ae_auto_paths <- gtsummary_reporter(
@@ -382,8 +384,9 @@ print_text_output(path_for_ext(ae_auto_paths, "txt"))
 
 ### Narrow max_table_width
 
-`max_table_width` caps the whole table. A narrower width forces long labels to
-wrap sooner and leaves less room for treatment columns.
+`max_table_width` caps the whole table by passing a table-width constraint to
+`reporter`. A narrower width forces long labels to wrap sooner and leaves less
+room for treatment columns.
 
 ```{r ae-width-narrow}
 title1 <- "Table 14.3.1 Overview of Adverse Events"
@@ -422,7 +425,7 @@ print_text_output(path_for_ext(ae_narrow_paths, "txt"))
 
 `column_widths` assigns widths in display-column order. For this data frame,
 the order is `label`, `placebo`, `active_low`, `active_high`, and `total`.
-Manual widths are useful when the label column needs more space than the
+Manual widths are useful when the label column needs more space than reporter's
 automatic estimate provides.
 
 ```{r ae-width-manual}
@@ -560,7 +563,7 @@ to a production report shell:
 - `column_labels` overrides displayed headers for plain data frames or
   special sponsor wording.
 - `spanning_headers` adds or overrides multi-column headers.
-- `max_table_width` caps the total table width.
+- `max_table_width` passes a total table-width constraint to `reporter`.
 - `column_widths` controls exact column allocation.
 - `max_chars_per_line` constrains TXT output to a known character budget.
 - `rows_per_page` forces manual chunks before `reporter` writes the report;
@@ -597,9 +600,10 @@ Before treating generated files as final, check that:
   frame);
 - all requested report formats were written;
 - title, footnote, and footer metadata are present;
-- label indentation is preserved after wrapping;
+- label indentation is preserved after wrapping, especially for TXT outputs
+  with manual label widths;
 - spanning headers cover the intended display columns;
-- the chosen widths fit the page setup and TXT character budget;
+- any chosen manual widths fit the page setup and TXT character budget;
 - manual page breaks occur at the intended row boundaries, if
   `rows_per_page` is used;
 - saved RDS data matches the rows and columns sent to `reporter`.

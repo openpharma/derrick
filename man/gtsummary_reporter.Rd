@@ -36,11 +36,10 @@ a plain \code{data.frame} to export.}
 \item{file_path}{Output path. The extension is ignored and output files are
 written according to \code{output_types}.}
 
-\item{max_table_width}{Maximum total table width in \code{report_units}. If
-\code{NULL}, uses the largest printable width for the current page setup. The
-largest effective value is:
-\code{page_width - left_margin - right_margin}; values above that are capped
-automatically. With the defaults (\code{report_paper_size = "letter"},
+\item{max_table_width}{Optional maximum total table width in \code{report_units}.
+If \code{NULL}, reporter chooses the automatic table width. Non-NULL values are
+capped at \code{page_width - left_margin - right_margin}. With the defaults
+(\code{report_paper_size = "letter"},
 \code{report_orientation = "landscape"}, \code{report_units = "inches"}, and
 default 1-inch left/right margins), the maximum effective value is \code{9}.
 For common defaults in inches: letter landscape = \code{9}, letter portrait =
@@ -51,10 +50,11 @@ letter portrait = \code{16.51}, A4 landscape = \code{24.62}, A4 portrait = \code
 RD4 landscape = \code{22.22}, RD4 portrait = \code{14.52}, legal landscape =
 \code{30.48}, legal portrait = \code{16.51}. \code{report_paper_size = "none"} gives an
 infinite page width. If margins exceed the physical page width, the
-effective width is \code{0}. Use \code{NULL} unless you intentionally want a narrower
-table.}
+effective width is \code{0}. Use \code{NULL} unless you intentionally want to
+constrain the table.}
 
-\item{min_col_width}{Minimum width allowed for any column, in \code{report_units}.}
+\item{min_col_width}{Minimum width allowed for manually supplied
+\code{column_widths}, in \code{report_units}.}
 
 \item{column_widths}{Optional manual column widths in \code{report_units}, either
 a numeric vector or a \code{"|"}-delimited string. Values are applied in display
@@ -68,7 +68,8 @@ scaled down to fit while respecting \code{min_col_width} where possible. If
 per-column floor is relaxed to \code{effective_width / n_cols}. If fewer widths
 than columns are supplied, the last width is repeated; if more are supplied,
 extras are ignored. Use \code{NULL} unless you need precise control over column
-allocation.}
+allocation. When \code{NULL}, reporter calculates column widths using its
+output-specific layout metrics.}
 
 \item{column_labels}{Optional column header overrides, as a named vector/list
 or a data frame with \code{column} and \code{label}.}
@@ -102,11 +103,11 @@ object (if available) as \code{.rds} files.}
 If \code{NULL}, no manual pre-splitting is done; reporter handles pagination in
 \code{write_report()} using its output-specific layout algorithm.}
 
-\item{max_chars_per_line}{Optional integer. Constrains the total table width
-so that at most this many characters fit across one TXT line (Courier at
-12 CPI). Applied after \code{max_table_width}, so the stricter limit wins.
-Useful when the character budget is known (e.g. \code{max_chars_per_line = 132}
-for a 132-column terminal or legacy print file).}
+\item{max_chars_per_line}{Optional integer. For TXT output, constrains the
+total table width so that at most this many characters fit across one TXT
+line (Courier at 12 CPI). Applied after \code{max_table_width}, so the stricter
+limit wins for TXT. Other output formats are not constrained by this
+argument. Title and footnote wrapping is delegated to reporter.}
 
 \item{debug_indent}{Logical; print indentation diagnostics.}
 
@@ -136,12 +137,16 @@ Widths are resolved in this order:
 \enumerate{
 \item Compute the usable page width as
 \code{page_width - left_margin - right_margin}.
-\item Cap \code{max_table_width} at that usable width; \code{NULL} means use the full
-usable width.
-\item Apply \code{max_chars_per_line} as an additional TXT character-budget cap
-(\code{max_chars_per_line / 12} inches), when supplied.
-\item Apply automatic or manual \code{column_widths}, then scale columns down to the
-effective table width when needed.
+\item If \code{max_table_width} is supplied, cap it at that usable width and pass it
+to \code{reporter::create_table()}. If it is \code{NULL}, no table width is passed
+and reporter calculates the automatic width for each output format.
+\item For TXT output only, apply \code{max_chars_per_line} as an additional
+character-budget cap (\code{max_chars_per_line / 12} inches), when supplied.
+\item If \code{column_widths} is supplied, pass those manual widths to reporter after
+scaling them down to the effective table width when needed. If
+\code{column_widths} is \code{NULL}, no column widths are passed and reporter
+calculates them from the target format, font, font size, headers, and
+table contents.
 }
 
 Pagination is delegated to \code{reporter} by default. When \code{rows_per_page} is

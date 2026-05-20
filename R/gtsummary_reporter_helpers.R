@@ -112,20 +112,6 @@ get_col_label <- function(x, default) {
   as.character(lbl)
 }
 
-#' Estimate a column display width (in inches) from its content
-#'
-#' @param x           Column values (coerced to character for measurement).
-#' @param min_width   Minimum returned width.
-#' @param max_width   Maximum returned width.
-#' @param chars_per_in Characters per inch assumption.
-#' @noRd
-calc_col_width <- function(x, min_width = 0.8, max_width = 3.5, chars_per_in = 8) {
-  chars <- suppressWarnings(max(nchar(as.character(x)), na.rm = TRUE))
-  if (!is.finite(chars)) chars <- min_width * chars_per_in
-  width <- chars / chars_per_in
-  pmin(max_width, pmax(min_width, width))
-}
-
 #' Parse a column-widths specification into a numeric vector
 #'
 #' Accepts a `"|"`-delimited string (e.g. `"10|5|5"`) or a numeric vector.
@@ -158,7 +144,8 @@ parse_column_widths <- function(widths, n_cols) {
 #' Scale column widths down so they fit within a maximum total width
 #'
 #' Enforces `min_width` on every column, then proportionally reduces widths
-#' that exceed the budget.
+#' that exceed the budget. This is only used for user-supplied manual widths;
+#' automatic widths are left to `reporter`.
 #'
 #' @param widths     Numeric vector of proposed widths.
 #' @param max_total  Maximum allowed total width.
@@ -374,6 +361,9 @@ compute_max_table_width <- function(paper_size, orientation, units, margins) {
 #' Wrap a single label string to at most `max_chars` characters per line,
 #' preserving any leading-space indentation on every continuation line
 #'
+#' This helper is used only for TXT label wrapping. RTF, DOCX, PDF, and HTML
+#' outputs rely on `reporter`'s format-specific physical indentation.
+#'
 #' @param txt       A single character value (may be `NA`).
 #' @param max_chars Maximum characters per line (must be >= 1).
 #' @noRd
@@ -393,59 +383,6 @@ wrap_with_indent <- function(txt, max_chars) {
                                simplify        = TRUE)
   paste(lines, collapse = "\n")
 }
-
-#' Wrap report title or footnote lines to a fixed character budget
-#'
-#' Each input element may expand to multiple output elements. Existing newline
-#' breaks are honoured before wrapping each physical line.
-#'
-#' @param x         Character vector of title or footnote lines.
-#' @param max_chars Maximum characters per output line.
-#' @noRd
-wrap_report_lines <- function(x, max_chars) {
-  if (is.null(x) || length(x) == 0) return(x)
-  if (!is.finite(max_chars)) return(as.character(x))
-  max_chars <- as.integer(max_chars)
-  if (!is.finite(max_chars) || max_chars < 1L) return(as.character(x))
-
-  pieces <- unlist(strsplit(as.character(x), "\n", fixed = TRUE), use.names = FALSE)
-  if (length(pieces) == 0) return(character(0))
-
-  wrapped <- vapply(
-    pieces,
-    wrap_with_indent,
-    character(1L),
-    max_chars = max_chars,
-    USE.NAMES = FALSE
-  )
-  unlist(strsplit(wrapped, "\n", fixed = TRUE), use.names = FALSE)
-}
-
-#' Estimate the title/footnote character budget from page geometry
-#'
-#' @param width       Usable page width in `units`.
-#' @param units       `"inches"` or `"cm"`.
-#' @param font_size   Courier font size in points.
-#' @param output_types Output formats requested.
-#' @noRd
-compute_report_line_chars <- function(width, units, font_size, output_types) {
-  if (!is.finite(width) || width <= 0) return(Inf)
-  width_in <- if (tolower(units) == "cm") width / 2.54 else width
-  out_upper <- normalize_output_types(output_types)
-
-  cpi_candidates <- numeric(0)
-  if ("TXT" %in% out_upper) cpi_candidates <- c(cpi_candidates, 12)
-  if (length(intersect(out_upper, c("RTF", "DOCX", "PDF", "HTML"))) > 0L) {
-    font_size <- as.numeric(font_size)
-    if (is.finite(font_size) && font_size > 0) {
-      cpi_candidates <- c(cpi_candidates, 120 / font_size)
-    }
-  }
-  if (length(cpi_candidates) == 0) cpi_candidates <- 12
-
-  max(1L, floor(width_in * min(cpi_candidates)))
-}
-
 
 # ---------------------------------------------------------------------------
 # Spanning header helpers
@@ -561,6 +498,10 @@ convert_gts_spanning_header <- function(gts_span, ordered_cols) {
 }
 
 
+#' Resolve a spanning-header endpoint to a column name
+#'
+#' Numeric endpoints are treated as display positions. Character endpoints must
+#' match a value in `cols`.
 #'
 #' @param x    Numeric index or column-name string.
 #' @param cols Character vector of ordered column names.
@@ -706,8 +647,13 @@ apply_spanning_headers <- function(tbl_obj, span_use, ordered_cols,
 
 #' Build a reporter table specification from a processed data frame
 #'
+#' `NULL` widths are passed through deliberately so `reporter` can calculate
+#' output-specific widths from the target format, font, headers, and contents.
+#' Non-NULL widths represent explicit user choices.
+#'
 #' @param df               Processed data frame (one page chunk or full table).
-#' @param col_widths       Named numeric vector of column widths.
+#' @param col_widths       Named numeric vector of manual column widths or `NULL`.
+#' @param table_width      Optional total table width passed to reporter.
 #' @param col_map          Data frame with `column` and `label` (visible cols).
 #' @param cols_to_define   Character vector: non-label, non-group columns.
 #' @param center_cols      Columns to centre-align (subset of `cols_to_define`).
@@ -718,7 +664,8 @@ apply_spanning_headers <- function(tbl_obj, span_use, ordered_cols,
 #' @param spanning_header_fn  `reporter::spanning_header` or `NULL`.
 #' @param debug_spanning   Logical; passed to `apply_spanning_headers()`.
 #' @noRd
-build_table_spec <- function(df, col_widths, col_map, cols_to_define, center_cols,
+build_table_spec <- function(df, col_widths = NULL, table_width = NULL,
+                              col_map, cols_to_define, center_cols,
                               label_overrides, group_cols_to_hide,
                               span_use, ordered_cols, spanning_header_fn,
                               debug_spanning = FALSE) {
@@ -731,18 +678,27 @@ build_table_spec <- function(df, col_widths, col_map, cols_to_define, center_col
 
   tbl <- reporter::create_table(
     df,
+    width           = table_width,
     first_row_blank = TRUE,
     header_bold     = TRUE,
     borders         = c("top", "bottom")
   ) %>%
     reporter::column_defaults(
-      width = min(1.2, max(0.8, min(col_widths, na.rm = TRUE))),
       align = "left"
-    ) %>%
-    reporter::define(label,
-                     label = label_header,
-                     width = col_widths[["label"]],
-                     align = "left")
+    )
+
+  if ("label" %in% names(df)) {
+    label_width <- if (!is.null(col_widths) && "label" %in% names(col_widths)) {
+      col_widths[["label"]]
+    } else {
+      NULL
+    }
+    tbl <- reporter::define(tbl,
+                            label,
+                            label = label_header,
+                            width = label_width,
+                            align = "left")
+  }
 
   if (length(group_cols_to_hide) > 0) {
     for (gcol in group_cols_to_hide) {
@@ -762,7 +718,11 @@ build_table_spec <- function(df, col_widths, col_map, cols_to_define, center_col
     }
     if (!this_col %in% cols_to_define) next
 
-    this_width <- if (this_col %in% names(col_widths)) col_widths[[this_col]] else NULL
+    this_width <- if (!is.null(col_widths) && this_col %in% names(col_widths)) {
+      col_widths[[this_col]]
+    } else {
+      NULL
+    }
     this_align <- if (this_col %in% center_cols) "center" else "left"
 
     tbl <- do.call(
@@ -806,6 +766,9 @@ apply_tbl_footnotes <- function(tbl_obj, footnotes_vec) {
 
 #' Safely call reporter::add_content, filtering unsupported arguments
 #'
+#' This keeps the package compatible with reporter versions that do not accept
+#' every optional argument used by newer releases.
+#'
 #' @param x      A reporter report object.
 #' @param object Content object to add.
 #' @param ...    Additional arguments forwarded if accepted by `add_content`.
@@ -815,4 +778,43 @@ add_content_safe <- function(x, object, ...) {
   keep <- intersect(names(args), names(formals(reporter::add_content)))
   args <- args[keep]
   do.call(reporter::add_content, c(list(x = x, object = object), args))
+}
+
+#' Infer reporter's TXT column widths for an automatic-width table
+#'
+#' For TXT output, leading-space hierarchy labels need pre-wrapping so
+#' continuation lines keep the same indentation. Rather than recreating
+#' reporter's width algorithm, this helper asks reporter to paginate a temporary
+#' table and reuses the column widths it calculated.
+#'
+#' @param df            Processed data frame.
+#' @param tbl_spec_args Arguments forwarded to [build_table_spec()].
+#' @param rpt           A reporter report object configured for TXT output.
+#'
+#' @return Named numeric vector of column widths, or `NULL` when reporter
+#'   internals are unavailable.
+#' @noRd
+infer_reporter_txt_col_widths <- function(df, tbl_spec_args, rpt) {
+  page_setup_fn <- tryCatch(
+    utils::getFromNamespace("page_setup", "reporter"),
+    error = function(e) NULL
+  )
+  paginate_content_fn <- tryCatch(
+    utils::getFromNamespace("paginate_content", "reporter"),
+    error = function(e) NULL
+  )
+  if (is.null(page_setup_fn) || is.null(paginate_content_fn)) return(NULL)
+
+  tryCatch(
+    {
+      tbl <- do.call(build_table_spec, c(list(df = df), tbl_spec_args))
+      rpt_tmp <- add_content_safe(rpt, tbl, blank_row = "none", align = "left")
+      rpt_tmp <- reporter::options_fixed(rpt_tmp, uchar = "_")
+      rpt_tmp <- page_setup_fn(rpt_tmp)
+      widths <- paginate_content_fn(rpt_tmp, rpt_tmp$content)[["widths"]]
+      if (length(widths) == 0L) return(NULL)
+      widths[[1L]]
+    },
+    error = function(e) NULL
+  )
 }

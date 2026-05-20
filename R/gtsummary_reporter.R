@@ -9,16 +9,17 @@
 # Function arguments (gtsummary_reporter):
 # - gts_obj: gtsummary object or plain data.frame to export
 # - file_path: output path (extension determines generated output names)
-# - max_table_width: max width (inches/cm) for all columns combined. The largest
-#   effective value is the printable page width after subtracting left/right
-#   margins; larger values are automatically capped. With defaults
-#   (letter + landscape + inches + 1-inch left/right margins), this is 9.
+# - max_table_width: optional max width (inches/cm) for all columns combined.
+#   When NULL, reporter determines the automatic table width for each output
+#   format. Non-NULL values are capped at the printable page width after
+#   subtracting left/right margins. With defaults (letter + landscape + inches
+#   + 1-inch left/right margins), this cap is 9.
 #   Common default maxima are: letter landscape 9 in / 22.86 cm, letter
 #   portrait 6.5 in / 16.51 cm, legal landscape 12 in / 30.48 cm, legal
 #   portrait 6.5 in / 16.51 cm, A4 landscape 9.69 in / 24.62 cm, A4 portrait
 #   6.27 in / 15.92 cm, RD4 landscape 8.70 in / 22.22 cm, and RD4 portrait
 #   5.70 in / 14.52 cm.
-# - min_col_width: minimum width for any column
+# - min_col_width: minimum width for manually supplied column widths
 # - column_widths: manual widths in display-column order (usually label first,
 #   then statistic columns), e.g. "3|2|2|2" for a 4-column table on the default
 #   9-inch usable width. Values are in report_units; their sum should generally
@@ -26,7 +27,8 @@
 #   scaled down. If fewer values are supplied, the last value is repeated; extra
 #   values are ignored. Values below min_col_width are raised when possible; if
 #   n_cols * min_col_width is wider than the effective page width, the floor is
-#   relaxed to effective_width / n_cols. Use NULL for automatic widths.
+#   relaxed to effective_width / n_cols. Use NULL to let reporter calculate
+#   automatic widths from output-specific metrics.
 # - column_labels: override column header labels (named vector or data.frame)
 # - spanning_headers: spanning header specs (data.frame or list)
 # - report_orientation: "landscape" or "portrait"
@@ -79,12 +81,16 @@
 #'
 #' 1. Compute the usable page width as
 #'    `page_width - left_margin - right_margin`.
-#' 2. Cap `max_table_width` at that usable width; `NULL` means use the full
-#'    usable width.
-#' 3. Apply `max_chars_per_line` as an additional TXT character-budget cap
-#'    (`max_chars_per_line / 12` inches), when supplied.
-#' 4. Apply automatic or manual `column_widths`, then scale columns down to the
-#'    effective table width when needed.
+#' 2. If `max_table_width` is supplied, cap it at that usable width and pass it
+#'    to `reporter::create_table()`. If it is `NULL`, no table width is passed
+#'    and reporter calculates the automatic width for each output format.
+#' 3. For TXT output only, apply `max_chars_per_line` as an additional
+#'    character-budget cap (`max_chars_per_line / 12` inches), when supplied.
+#' 4. If `column_widths` is supplied, pass those manual widths to reporter after
+#'    scaling them down to the effective table width when needed. If
+#'    `column_widths` is `NULL`, no column widths are passed and reporter
+#'    calculates them from the target format, font, font size, headers, and
+#'    table contents.
 #'
 #' Pagination is delegated to `reporter` by default. When `rows_per_page` is
 #' `NULL`, the table is passed to `reporter::write_report()` as one table, and
@@ -97,11 +103,10 @@
 #'   a plain `data.frame` to export.
 #' @param file_path Output path. The extension is ignored and output files are
 #'   written according to `output_types`.
-#' @param max_table_width Maximum total table width in `report_units`. If
-#'   `NULL`, uses the largest printable width for the current page setup. The
-#'   largest effective value is:
-#'   `page_width - left_margin - right_margin`; values above that are capped
-#'   automatically. With the defaults (`report_paper_size = "letter"`,
+#' @param max_table_width Optional maximum total table width in `report_units`.
+#'   If `NULL`, reporter chooses the automatic table width. Non-NULL values are
+#'   capped at `page_width - left_margin - right_margin`. With the defaults
+#'   (`report_paper_size = "letter"`,
 #'   `report_orientation = "landscape"`, `report_units = "inches"`, and
 #'   default 1-inch left/right margins), the maximum effective value is `9`.
 #'   For common defaults in inches: letter landscape = `9`, letter portrait =
@@ -112,9 +117,10 @@
 #'   RD4 landscape = `22.22`, RD4 portrait = `14.52`, legal landscape =
 #'   `30.48`, legal portrait = `16.51`. `report_paper_size = "none"` gives an
 #'   infinite page width. If margins exceed the physical page width, the
-#'   effective width is `0`. Use `NULL` unless you intentionally want a narrower
-#'   table.
-#' @param min_col_width Minimum width allowed for any column, in `report_units`.
+#'   effective width is `0`. Use `NULL` unless you intentionally want to
+#'   constrain the table.
+#' @param min_col_width Minimum width allowed for manually supplied
+#'   `column_widths`, in `report_units`.
 #' @param column_widths Optional manual column widths in `report_units`, either
 #'   a numeric vector or a `"|"`-delimited string. Values are applied in display
 #'   column order, usually the `label` column first, followed by statistic or
@@ -127,12 +133,13 @@
 #'   per-column floor is relaxed to `effective_width / n_cols`. If fewer widths
 #'   than columns are supplied, the last width is repeated; if more are supplied,
 #'   extras are ignored. Use `NULL` unless you need precise control over column
-#'   allocation.
-#' @param max_chars_per_line Optional integer. Constrains the total table width
-#'   so that at most this many characters fit across one TXT line (Courier at
-#'   12 CPI). Applied after `max_table_width`, so the stricter limit wins.
-#'   Useful when the character budget is known (e.g. `max_chars_per_line = 132`
-#'   for a 132-column terminal or legacy print file).
+#'   allocation. When `NULL`, reporter calculates column widths using its
+#'   output-specific layout metrics.
+#' @param max_chars_per_line Optional integer. For TXT output, constrains the
+#'   total table width so that at most this many characters fit across one TXT
+#'   line (Courier at 12 CPI). Applied after `max_table_width`, so the stricter
+#'   limit wins for TXT. Other output formats are not constrained by this
+#'   argument. Title and footnote wrapping is delegated to reporter.
 #' @param column_labels Optional column header overrides, as a named vector/list
 #'   or a data frame with `column` and `label`.
 #' @param spanning_headers Optional spanning header definitions, as a data frame
@@ -396,167 +403,67 @@ gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
   )
   if (length(missing_cols) > 0) message(paste(missing_cols, collapse = ", "))
 
-  # E. Column width calculation --------------------------------------------------
+  # E. Width controls and column setup ------------------------------------------
 
-  # Resolve column-label overrides first (needed for header width contribution)
+  # Resolve column-label overrides before table construction.
   label_overrides <- normalize_column_labels(column_labels)
   if (!is.null(label_overrides)) {
     label_overrides <- lapply(label_overrides, strip_md_bold)
   }
 
-  # Build definitive header label map (visible cols + "label" pseudo-column)
-  hdr_map <- header_df %>%
-    dplyr::filter(!hide) %>%
-    dplyr::select(column, label)
-  if (!is.null(label_overrides)) {
-    hdr_map$label <- ifelse(
-      hdr_map$column %in% names(label_overrides),
-      unlist(label_overrides[hdr_map$column]),
-      hdr_map$label
-    )
-  }
-  hdr_map <- dplyr::bind_rows(
-    tibble::tibble(column = "label", label = "Characteristic"),
-    hdr_map
-  )
-  if (!is.null(label_overrides) && "label" %in% names(label_overrides)) {
-    hdr_map$label[hdr_map$column == "label"] <- label_overrides[["label"]]
-  }
-
-  # Initial widths: max of data content width and header label width
+  # Manual widths are applied in display-column order. When column_widths is
+  # NULL, do not pass column widths at all; reporter computes them using the
+  # target output format, font, header labels, and table contents.
   width_cols <- setdiff(names(processed_df), group_cols_to_hide)
   if (!"label" %in% width_cols && "label" %in% names(processed_df)) {
     width_cols <- c("label", width_cols)
   }
-  col_widths   <- vapply(processed_df[width_cols], calc_col_width, numeric(1))
-  label_widths <- stats::setNames(
-    vapply(hdr_map$label, calc_col_width, numeric(1)),
-    hdr_map$column
-  )
-  shared <- intersect(names(col_widths), names(label_widths))
-  col_widths[shared] <- pmax(col_widths[shared], label_widths[shared])
 
-  # calc_col_width always works in inches; convert to report_units if needed
-  if (tolower(report_units) == "cm") col_widths <- col_widths * 2.54
-
-  # Track whether the user explicitly constrained the table width. When TRUE,
-  # slack is distributed proportionally so the table reaches the requested
-  # width without squeezing statistic columns.
-  user_constrained_width <- !is.null(max_table_width) || !is.null(max_chars_per_line)
-
-  # Resolve max_table_width: always cap at the page usable width so reporter
-  # never receives columns that exceed the printable area.
   page_max <- compute_max_table_width(
     paper_size  = report_paper_size,
     orientation = report_orientation,
     units       = report_units,
     margins     = report_margins
   )
-  if (is.null(max_table_width)) {
-    max_table_width <- page_max
-  } else {
-    max_table_width <- min(max_table_width, page_max)
+
+  table_width <- NULL
+  if (!is.null(max_table_width)) {
+    max_table_width_num <- suppressWarnings(as.numeric(max_table_width))
+    if (length(max_table_width_num) > 0L && is.finite(max_table_width_num[1L])) {
+      table_width <- min(max_table_width_num[1L], page_max)
+      table_width <- max(0, table_width)
+    }
   }
 
+  txt_table_width <- NULL
   if (!is.null(max_chars_per_line)) {
     # TXT Courier uses exactly 12 CPI; convert character budget to physical width
     max_chars_per_line_num <- suppressWarnings(as.numeric(max_chars_per_line))
     if (is.finite(max_chars_per_line_num) && max_chars_per_line_num > 0) {
       chars_width_in <- max_chars_per_line_num / 12
       chars_width    <- if (tolower(report_units) == "cm") chars_width_in * 2.54 else chars_width_in
-      max_table_width <- min(max_table_width, chars_width)
+      txt_table_width <- min(chars_width, page_max)
     }
   }
 
-  max_report_line_chars <- compute_report_line_chars(
-    width        = page_max,
-    units        = report_units,
-    font_size    = report_font_size,
-    output_types = output_types
-  )
-  if (!is.null(max_chars_per_line)) {
-    max_chars_per_line_num <- suppressWarnings(as.numeric(max_chars_per_line))
-    if (is.finite(max_chars_per_line_num) && max_chars_per_line_num > 0) {
-      max_report_line_chars <- min(
-        max_report_line_chars,
-        as.integer(max_chars_per_line_num)
-      )
-    }
-  }
-  title         <- wrap_report_lines(title, max_report_line_chars)
-  footnotes_vec <- wrap_report_lines(footnotes_vec, max_report_line_chars)
-
-  manual_widths <- parse_column_widths(column_widths, n_cols = length(col_widths))
+  manual_widths <- parse_column_widths(column_widths, n_cols = length(width_cols))
+  col_widths <- NULL
   if (!is.null(manual_widths)) {
     col_widths        <- manual_widths
     names(col_widths) <- width_cols
-    if (is.finite(max_table_width)) {
-      col_widths <- adjust_col_widths(col_widths,
-                                       max_total = max_table_width,
-                                       min_width = min_col_width)
+
+    width_cap <- table_width
+    if (is.null(width_cap) && is.finite(page_max)) {
+      width_cap <- page_max
     }
-  } else {
-    if ("label" %in% names(col_widths) && is.finite(max_table_width)) {
-      label_target    <- col_widths[["label"]]
-      other_cols      <- setdiff(names(col_widths), "label")
-      min_other_total <- length(other_cols) * min_col_width
-      max_label_width <- max_table_width - min_other_total
-      label_width     <- max(min(label_target, max_label_width), min_col_width)
-
-      other_widths <- col_widths[other_cols]
-      other_widths[!is.finite(other_widths)] <- min_col_width
-      other_widths <- pmax(other_widths, min_col_width)
-
-      total_other <- sum(other_widths)
-      remaining   <- max_table_width - label_width
-      if (total_other > remaining && total_other > 0) {
-        other_widths <- other_widths * (remaining / total_other)
-      } else if (user_constrained_width) {
-        # User explicitly asked for a specific width: distribute the extra space
-        # proportionally across all columns (label and stats) based on their
-        # auto-computed targets, alleviating squeezed stat columns.
-        total_auto <- label_width + sum(other_widths)
-        if (total_auto < max_table_width && total_auto > 0) {
-          scale        <- max_table_width / total_auto
-          label_width  <- label_width * scale
-          other_widths <- other_widths * scale
-        }
-      }
-
-      col_widths <- c(label = label_width, other_widths)
-      col_widths <- col_widths[names(processed_df)]
-    } else {
+    if (!is.null(width_cap) && is.finite(width_cap)) {
       col_widths <- adjust_col_widths(col_widths,
-                                       max_total = max_table_width,
+                                       max_total = width_cap,
                                        min_width = min_col_width)
     }
   }
 
-  # E1. Pre-wrap label column ---------------------------------------------------
-  # reporter's TXT renderer uses exactly 12 CPI for Courier regardless of
-  # font_size, and reserves 1 character per column for the inter-column
-  # separator. The effective content width is therefore:
-  #   floor(col_width_in * 12) - 1
-  # col_widths are in report_units; convert to inches first for CPI arithmetic.
-  # Pre-wrapping to this limit prevents reporter from re-wrapping our lines,
-  # which would strip the leading-space indentation from continuation lines.
-  if ("label" %in% names(processed_df) &&
-      "label" %in% names(col_widths) &&
-      is.finite(col_widths[["label"]])) {
-    cpi             <- 12L
-    label_width_in  <- if (tolower(report_units) == "cm") col_widths[["label"]] / 2.54
-                       else col_widths[["label"]]
-    max_label_chars <- max(10L, floor(label_width_in * cpi) - 1L)
-
-    processed_df$label <- vapply(
-      as.character(processed_df$label),
-      wrap_with_indent,
-      character(1L),
-      max_chars = max_label_chars
-    )
-  }
-
-  # E2. Column map and spanning header setup ------------------------------------
+  # E1. Column map and spanning header setup ------------------------------------
   col_map        <- header_df %>% dplyr::filter(!hide)
   cols_to_define <- setdiff(names(processed_df), c("label", group_cols_to_hide))
   ordered_cols   <- names(processed_df)
@@ -574,32 +481,12 @@ gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
     error = function(e) NULL
   )
 
-  # F. Assemble report -----------------------------------------------------------
-  rpt <- reporter::create_report(
-    font        = "Courier",
-    orientation = report_orientation,
-    paper_size  = report_paper_size,
-    units       = report_units,
-    font_size   = report_font_size
-  ) %>%
-    {
-      if (length(title) > 0) {
-        reporter::titles(., title, bold = TRUE,
-                          font_size = report_font_size, align = "left")
-      } else {
-        .
-      }
-    }
+  # F. Assemble report per output type ------------------------------------------
 
-  if (!is.null(report_margins)) {
-    report_margins <- normalize_margins(report_margins, report_units)
-    rpt <- do.call(reporter::set_margins,
-                   c(list(x = rpt), as.list(report_margins)))
-  }
-
-  # Package all build_table_spec context into one list for DRY call sites
+  # Package all build_table_spec context into one list for DRY call sites.
   tbl_spec_args <- list(
     col_widths         = col_widths,
+    table_width        = table_width,
     col_map            = col_map,
     cols_to_define     = cols_to_define,
     center_cols        = center_cols,
@@ -611,44 +498,133 @@ gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
     debug_spanning     = debug_spanning
   )
 
-  footnote_applied <- FALSE
+  create_base_report <- function() {
+    rpt <- reporter::create_report(
+      font        = "Courier",
+      orientation = report_orientation,
+      paper_size  = report_paper_size,
+      units       = report_units,
+      font_size   = report_font_size
+    ) %>%
+      {
+        if (length(title) > 0) {
+          reporter::titles(., title, bold = TRUE,
+                            font_size = report_font_size, align = "left")
+        } else {
+          .
+        }
+      }
 
-  # reporter computes page breaks during write_report() from output-specific
-  # fixed metrics and actual wrapped line counts. Pre-split only on request.
-  if (!is.null(rows_per_page) && is.finite(rows_per_page) && rows_per_page > 0) {
-    row_ids   <- seq_len(nrow(processed_df))
-    chunk_ids <- split(row_ids, ceiling(row_ids / rows_per_page))
-
-    for (i in seq_along(chunk_ids)) {
-      chunk_df  <- processed_df[chunk_ids[[i]], , drop = FALSE]
-      tbl_chunk <- do.call(build_table_spec, c(list(df = chunk_df), tbl_spec_args))
-
-      fn_result        <- apply_tbl_footnotes(tbl_chunk, footnotes_vec)
-      tbl_chunk        <- fn_result$tbl
-      footnote_applied <- fn_result$applied
-
-      rpt <- add_content_safe(
-        rpt,
-        tbl_chunk,
-        blank_row  = "none",
-        align      = "left",
-        page_break = i < length(chunk_ids)
-      )
+    if (!is.null(report_margins)) {
+      margin_values <- normalize_margins(report_margins, report_units)
+      rpt <- do.call(reporter::set_margins,
+                     c(list(x = rpt), as.list(margin_values)))
     }
-  } else {
-    tbl      <- do.call(build_table_spec, c(list(df = processed_df), tbl_spec_args))
-    fn_result        <- apply_tbl_footnotes(tbl, footnotes_vec)
-    tbl              <- fn_result$tbl
-    footnote_applied <- fn_result$applied
 
-    rpt <- add_content_safe(rpt, tbl, blank_row = "none", align = "left")
+    rpt
   }
 
-  # Fallback: attach footnotes to report when table-level application failed
-  if (!isTRUE(footnote_applied) && length(footnotes_vec) > 0) {
-    for (note in footnotes_vec) {
-      rpt <- rpt %>% reporter::footnotes(note, blank_row = "none")
+  build_report_for_output <- function(output_type) {
+    output_df <- processed_df
+    output_col_widths <- col_widths
+    output_table_width <- table_width
+
+    if (identical(output_type, "TXT") && !is.null(txt_table_width)) {
+      output_table_width <- if (is.null(output_table_width)) {
+        txt_table_width
+      } else {
+        min(output_table_width, txt_table_width)
+      }
+      if (!is.null(manual_widths)) {
+        output_col_widths <- manual_widths
+        names(output_col_widths) <- width_cols
+        if (is.finite(output_table_width)) {
+          output_col_widths <- adjust_col_widths(
+            output_col_widths,
+            max_total = output_table_width,
+            min_width = min_col_width
+          )
+        }
+      }
     }
+
+    output_tbl_spec_args <- tbl_spec_args
+    output_tbl_spec_args$col_widths <- output_col_widths
+    output_tbl_spec_args$table_width <- output_table_width
+
+    rpt <- create_base_report()
+
+    # TXT is the only format where we pre-wrap leading-space hierarchy labels.
+    # For RTF/DOCX/PDF/HTML, reporter can measure and indent wrapped text using
+    # physical units, so the unwrapped label text is passed through.
+    if (identical(output_type, "TXT") && "label" %in% names(output_df)) {
+      txt_col_widths <- output_col_widths
+      if (is.null(txt_col_widths) || !"label" %in% names(txt_col_widths)) {
+        txt_col_widths <- infer_reporter_txt_col_widths(
+          df            = output_df,
+          tbl_spec_args = output_tbl_spec_args,
+          rpt           = rpt
+        )
+      }
+
+      if (!is.null(txt_col_widths) &&
+          "label" %in% names(txt_col_widths) &&
+          is.finite(txt_col_widths[["label"]])) {
+        cpi             <- 12L
+        label_width_in  <- if (tolower(report_units) == "cm") txt_col_widths[["label"]] / 2.54
+                           else txt_col_widths[["label"]]
+        max_label_chars <- max(10L, floor(label_width_in * cpi) - 1L)
+
+        output_df$label <- vapply(
+          as.character(output_df$label),
+          wrap_with_indent,
+          character(1L),
+          max_chars = max_label_chars
+        )
+      }
+    }
+
+    footnote_applied <- FALSE
+
+    # reporter computes page breaks during write_report() from output-specific
+    # fixed metrics and actual wrapped line counts. Pre-split only on request.
+    if (!is.null(rows_per_page) && is.finite(rows_per_page) && rows_per_page > 0) {
+      row_ids   <- seq_len(nrow(output_df))
+      chunk_ids <- split(row_ids, ceiling(row_ids / rows_per_page))
+
+      for (i in seq_along(chunk_ids)) {
+        chunk_df  <- output_df[chunk_ids[[i]], , drop = FALSE]
+        tbl_chunk <- do.call(build_table_spec, c(list(df = chunk_df), output_tbl_spec_args))
+
+        fn_result        <- apply_tbl_footnotes(tbl_chunk, footnotes_vec)
+        tbl_chunk        <- fn_result$tbl
+        footnote_applied <- isTRUE(footnote_applied) || isTRUE(fn_result$applied)
+
+        rpt <- add_content_safe(
+          rpt,
+          tbl_chunk,
+          blank_row  = "none",
+          align      = "left",
+          page_break = i < length(chunk_ids)
+        )
+      }
+    } else {
+      tbl              <- do.call(build_table_spec, c(list(df = output_df), output_tbl_spec_args))
+      fn_result        <- apply_tbl_footnotes(tbl, footnotes_vec)
+      tbl              <- fn_result$tbl
+      footnote_applied <- fn_result$applied
+
+      rpt <- add_content_safe(rpt, tbl, blank_row = "none", align = "left")
+    }
+
+    # Fallback: attach footnotes to report when table-level application failed.
+    if (!isTRUE(footnote_applied) && length(footnotes_vec) > 0) {
+      for (note in footnotes_vec) {
+        rpt <- rpt %>% reporter::footnotes(note, blank_row = "none")
+      }
+    }
+
+    rpt
   }
 
   # G. Footer and output --------------------------------------------------------
@@ -702,7 +678,8 @@ gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
   # G2. Write requested report formats -----------------------------------------
   for (output_type in output_types) {
     output_path <- paste0(base_path, ".", output_file_extension(output_type))
-    rpt_out <- reporter::page_footer(rpt, right = footer_right)
+    rpt_out <- build_report_for_output(output_type)
+    rpt_out <- reporter::page_footer(rpt_out, right = footer_right)
 
     if (identical(output_type, "TXT")) {
       rpt_out <- reporter::options_fixed(rpt_out, uchar = "_")

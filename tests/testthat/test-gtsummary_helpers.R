@@ -78,21 +78,6 @@ test_that("get_col_label returns default for empty label", {
 })
 
 # ---------------------------------------------------------------------------
-test_that("calc_col_width respects min and max", {
-  # Very short content uses min_width
-  expect_equal(derrick:::calc_col_width("a", min_width = 0.8, max_width = 3.5), 0.8)
-  # Very long content uses max_width
-  long <- paste(rep("x", 200), collapse = "")
-  expect_equal(derrick:::calc_col_width(long, min_width = 0.8, max_width = 3.5), 3.5)
-})
-
-test_that("calc_col_width returns finite value for NA input", {
-  w <- derrick:::calc_col_width(NA_character_, min_width = 0.5)
-  expect_true(is.finite(w))
-  expect_gte(w, 0.5)
-})
-
-# ---------------------------------------------------------------------------
 test_that("parse_column_widths returns NULL for NULL input", {
   expect_null(derrick:::parse_column_widths(NULL, n_cols = 3))
 })
@@ -156,77 +141,6 @@ test_that("manual column widths are scaled to the effective page width", {
   expect_true(all(res >= 0.6))
   expect_true(all(res < manual))
 })
-
-# ---------------------------------------------------------------------------
-# label-first width logic (inline in gtsummary_reporter):
-# tested here via the helper primitives it composes
-# ---------------------------------------------------------------------------
-
-# Shared helper: runs the label-first logic as it appears in the main function
-label_first <- function(col_widths, max_table_width,
-                         user_constrained, min_col_width = 0.6) {
-  label_target    <- col_widths[["label"]]
-  other_cols      <- setdiff(names(col_widths), "label")
-  min_other_total <- length(other_cols) * min_col_width
-  max_label_width <- max_table_width - min_other_total
-  label_width     <- max(min(label_target, max_label_width), min_col_width)
-  other_widths    <- col_widths[other_cols]
-  other_widths[!is.finite(other_widths)] <- min_col_width
-  other_widths    <- pmax(other_widths, min_col_width)
-  total_other     <- sum(other_widths)
-  remaining       <- max_table_width - label_width
-  if (total_other > remaining && total_other > 0) {
-    other_widths <- other_widths * (remaining / total_other)
-  } else if (user_constrained) {
-    total_auto <- label_width + sum(other_widths)
-    if (total_auto < max_table_width && total_auto > 0) {
-      scale        <- max_table_width / total_auto
-      label_width  <- label_width * scale
-      other_widths <- other_widths * scale
-    }
-  }
-  c(label = label_width, other_widths)
-}
-
-# auto-sum (5.75) < mtw (9): no constraint, no expansion
-test_that("label-first: no expansion when width not user-constrained", {
-  cw  <- c(label = 0.875, s1 = 1.375, s2 = 1.375, s3 = 2.125)
-  res <- label_first(cw, max_table_width = 9, user_constrained = FALSE)
-  expect_equal(sum(res), sum(cw))            # unchanged
-  expect_equal(res[["label"]], cw[["label"]])
-})
-
-# user sets max_table_width = 9: all columns expand proportionally
-test_that("label-first: all columns expand proportionally to fill user-constrained width", {
-  cw  <- c(label = 0.875, s1 = 1.375, s2 = 1.375, s3 = 2.125)
-  res <- label_first(cw, max_table_width = 9, user_constrained = TRUE)
-  expect_equal(sum(res), 9, tolerance = 1e-9)
-  # every column should be wider than the auto value
-  expect_gt(res[["label"]], cw[["label"]])
-  expect_gt(res[["s1"]],    cw[["s1"]])
-  expect_gt(res[["s3"]],    cw[["s3"]])
-  # relative widths preserved: s1 == s2, s3 > s1
-  expect_equal(res[["s1"]], res[["s2"]], tolerance = 1e-9)
-  expect_gt(res[["s3"]], res[["s1"]])
-})
-
-# user sets max_table_width = 7 (between auto-sum and page)
-test_that("label-first: all columns scale to exactly max_table_width = 7", {
-  cw  <- c(label = 0.875, s1 = 1.375, s2 = 1.375, s3 = 2.125)
-  res <- label_first(cw, max_table_width = 7, user_constrained = TRUE)
-  expect_equal(sum(res), 7, tolerance = 1e-9)
-  scale <- 7 / sum(cw)
-  expect_equal(res[["s1"]], cw[["s1"]] * scale, tolerance = 1e-9)
-})
-
-# user sets max_table_width < auto-sum: shrink path, user_constrained has no effect
-test_that("label-first: shrinks when auto-sum exceeds max_table_width", {
-  cw  <- c(label = 3.5, s1 = 3.5, s2 = 3.5)
-  res <- label_first(cw, max_table_width = 7, user_constrained = TRUE)
-  expect_lte(sum(res), 7 + 1e-9)
-  expect_equal(res[["label"]], 3.5)  # label not touched when shrinking stats
-})
-
 
 test_that("normalize_reporter_paper_size accepts reporter aliases", {
   expect_equal(derrick:::normalize_reporter_paper_size("letter"), "letter")
@@ -634,6 +548,64 @@ test_that("build_table_spec creates bold column headers by default", {
   expect_true(out$header_bold)
 })
 
+test_that("build_table_spec leaves automatic widths to reporter", {
+  skip_if_not_installed("reporter")
+
+  df <- data.frame(label = "Row", stat_1 = "1")
+  col_map <- data.frame(
+    column = "stat_1",
+    label = "Drug A",
+    stringsAsFactors = FALSE
+  )
+
+  out <- derrick:::build_table_spec(
+    df = df,
+    col_widths = NULL,
+    table_width = NULL,
+    col_map = col_map,
+    cols_to_define = "stat_1",
+    center_cols = "stat_1",
+    label_overrides = list(label = "Characteristic"),
+    group_cols_to_hide = character(0),
+    span_use = NULL,
+    ordered_cols = names(df),
+    spanning_header_fn = reporter::spanning_header
+  )
+
+  expect_null(out[["width"]])
+  expect_null(out[["col_defs"]][["label"]][["width"]])
+  expect_null(out[["col_defs"]][["stat_1"]][["width"]])
+})
+
+test_that("build_table_spec forwards manual widths to reporter", {
+  skip_if_not_installed("reporter")
+
+  df <- data.frame(label = "Row", stat_1 = "1")
+  col_map <- data.frame(
+    column = "stat_1",
+    label = "Drug A",
+    stringsAsFactors = FALSE
+  )
+
+  out <- derrick:::build_table_spec(
+    df = df,
+    col_widths = c(label = 2, stat_1 = 1),
+    table_width = 3,
+    col_map = col_map,
+    cols_to_define = "stat_1",
+    center_cols = "stat_1",
+    label_overrides = list(label = "Characteristic"),
+    group_cols_to_hide = character(0),
+    span_use = NULL,
+    ordered_cols = names(df),
+    spanning_header_fn = reporter::spanning_header
+  )
+
+  expect_equal(out[["width"]], 3)
+  expect_equal(out[["col_defs"]][["label"]][["width"]], 2)
+  expect_equal(out[["col_defs"]][["stat_1"]][["width"]], 1)
+})
+
 # ---------------------------------------------------------------------------
 test_that("wrap_with_indent returns short text unchanged", {
   expect_equal(derrick:::wrap_with_indent("Short", 40), "Short")
@@ -665,60 +637,6 @@ test_that("wrap_with_indent preserves indentation on continuation lines", {
 test_that("wrap_with_indent handles empty/whitespace-only strings", {
   expect_equal(derrick:::wrap_with_indent("", 10),   "")
   expect_equal(derrick:::wrap_with_indent("   ", 10), "   ")
-})
-
-test_that("wrap_report_lines expands long title and footnote lines", {
-  txt <- "This title line is too long for a narrow report page"
-  res <- derrick:::wrap_report_lines(txt, 18)
-  expect_true(length(res) > 1)
-  expect_true(all(nchar(res) <= 18))
-})
-
-test_that("wrap_report_lines honours existing newline breaks", {
-  txt <- "Short line\nThis second line is too long"
-  res <- derrick:::wrap_report_lines(txt, 12)
-  expect_equal(res[1], "Short line")
-  expect_true(length(res) > 2)
-  expect_true(all(nchar(res) <= 12))
-})
-
-test_that("compute_report_line_chars uses the strictest requested output", {
-  txt_chars <- derrick:::compute_report_line_chars(
-    width = 9, units = "inches", font_size = 9, output_types = "TXT"
-  )
-  rtf_chars <- derrick:::compute_report_line_chars(
-    width = 9, units = "inches", font_size = 9, output_types = "RTF"
-  )
-  both_chars <- derrick:::compute_report_line_chars(
-    width = 9, units = "inches", font_size = 9, output_types = c("RTF", "TXT")
-  )
-  expect_equal(txt_chars, 108)
-  expect_gt(rtf_chars, txt_chars)
-  expect_equal(both_chars, txt_chars)
-})
-
-test_that("compute_report_line_chars handles DOCX, PDF, and HTML like proportional outputs", {
-  rtf_chars <- derrick:::compute_report_line_chars(
-    width = 9, units = "inches", font_size = 9, output_types = "RTF"
-  )
-  expect_equal(
-    derrick:::compute_report_line_chars(
-      width = 9, units = "inches", font_size = 9, output_types = "DOCX"
-    ),
-    rtf_chars
-  )
-  expect_equal(
-    derrick:::compute_report_line_chars(
-      width = 9, units = "inches", font_size = 9, output_types = "PDF"
-    ),
-    rtf_chars
-  )
-  expect_equal(
-    derrick:::compute_report_line_chars(
-      width = 9, units = "inches", font_size = 9, output_types = "HTML"
-    ),
-    rtf_chars
-  )
 })
 
 # ---------------------------------------------------------------------------
@@ -782,6 +700,33 @@ test_that("wrap_with_indent SOC/PT: full dummy AE table column is consistent", {
     expect_true(all(nchar(lines) <= max_chars),
                 info = paste("width exceeded for:", labels[i]))
   }
+})
+
+test_that("TXT automatic widths preserve indentation on wrapped label rows", {
+  skip_if_not_installed("reporter")
+
+  df <- data.frame(
+    label = c(
+      "Nervous system disorders",
+      "  Dizziness postural with additional clinical detail that should wrap onto a continuation sentinel",
+      "  Headache"
+    ),
+    stat_1 = c("", "1 (2.0%)", "2 (4.0%)"),
+    stringsAsFactors = FALSE
+  )
+
+  out <- derrick::gtsummary_reporter(
+    df,
+    file.path(tempdir(), paste0("txt-indent-", Sys.getpid(), ".rtf")),
+    output_types = "TXT",
+    max_chars_per_line = 48,
+    save_rds = FALSE
+  )
+
+  lines <- readLines(out, warn = FALSE)
+  sentinel_lines <- lines[grepl("sentinel", lines)]
+  expect_true(length(sentinel_lines) > 0L)
+  expect_true(any(grepl("^  .*sentinel", sentinel_lines)))
 })
 
 

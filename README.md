@@ -15,8 +15,8 @@ reporting work:
 - one table specification can produce RTF, TXT, DOCX, PDF, and HTML files;
 - `gtsummary` labels, p-values, indentation, and spanning headers are carried
   into the report output;
-- page geometry, margins, column widths, and TXT character budgets can be
-  controlled explicitly;
+- page geometry, margins, manual column widths, and TXT character budgets can
+  be controlled explicitly;
 - titles, footnotes, program names, timestamps, and optional RDS exports are
   handled in one call.
 
@@ -105,9 +105,9 @@ gtsummary_reporter(
 
 ## Layout Controls
 
-Use defaults first. By default, `derrick` uses the printable page width from
-the selected paper size, orientation, units, and margins, then scales columns
-down only when needed.
+Use defaults first. By default, `derrick` lets `reporter` calculate table and
+column widths for the requested output format. Supply width arguments only when
+the report shell requires a specific layout.
 
 | Argument | Use when |
 | --- | --- |
@@ -118,14 +118,16 @@ down only when needed.
 | `report_orientation`, `report_paper_size`, `report_margins` | The table must match a specific page setup. |
 | `rows_per_page` | You need manual row chunks before `reporter` writes the final files. |
 
-Reporter-managed pagination is used by default. Leave `rows_per_page = NULL`
-unless a table needs fixed row chunks for a specific deliverable.
+Reporter-managed widths, wrapping, and pagination are used by default.
+`max_chars_per_line` only constrains TXT output. Leave
+`rows_per_page = NULL` unless a table needs fixed row chunks for a specific
+deliverable.
 
 ## Metadata and Diagnostics
 
 `gtsummary_reporter()` automatically looks for `title1` through `title9`,
 `footnote1` through `footnote9`, and `progname` in the caller environment.
-Titles and footnotes are wrapped to the active page width before the report is
+Title and footnote wrapping is handled by `reporter` when the report is
 written.
 
 For layout validation, use:
