@@ -30,6 +30,7 @@ Suggests:
     knitr,
     rmarkdown,
     testthat (>= 3.3.0)
+Config/Needs/website: pkgdown
 VignetteBuilder: knitr
 Encoding: UTF-8
 Language: en-US

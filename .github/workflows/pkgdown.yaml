@@ -17,7 +17,7 @@ on:
       - main
     paths:
       - inst/templates/**
-      - _pkgdown.yaml
+      - _pkgdown.yml
       - DESCRIPTION
       - "**.md"
       - "**.Rmd"
