@@ -788,7 +788,7 @@ add_content_safe <- function(x, object, ...) {
 #' table and reuses the column widths it calculated.
 #'
 #' @param df            Processed data frame.
-#' @param tbl_spec_args Arguments forwarded to [build_table_spec()].
+#' @param tbl_spec_args Arguments forwarded to `build_table_spec()`.
 #' @param rpt           A reporter report object configured for TXT output.
 #'
 #' @return Named numeric vector of column widths, or `NULL` when reporter
