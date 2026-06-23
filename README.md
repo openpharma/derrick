@@ -1,4 +1,4 @@
-# derrick
+# derrick <img src="inst/figures/logo.png" align="right" height="139" alt="derrick hex logo" />
 
 [![Project Status: Active](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 [![BiocCheck](https://github.com/openpharma/derrick/actions/workflows/bioccheck.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/bioccheck.yaml)
