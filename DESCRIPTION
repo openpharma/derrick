@@ -20,13 +20,13 @@ Depends:
 Imports:
     dplyr,
     purrr,
-    reporter,
+    reporter (>= 1.4.7),
     rlang,
     stringi,
     tibble
 Suggests:
-    cards,
-    gtsummary,
+    cards (>= 0.8.0),
+    gtsummary (>= 2.5.1),
     knitr,
     rmarkdown,
     testthat (>= 3.3.0)

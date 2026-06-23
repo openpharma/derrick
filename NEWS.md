@@ -9,6 +9,7 @@
 
 * Bold spanning headers by default so table headers render consistently.
 * Documentation on how to use the initialize a package.
+* Set minimum versions for `reporter`, `cards`, and `gtsummary` in `DESCRIPTION`.
 
 ### Bug fixes
 
