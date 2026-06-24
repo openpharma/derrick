@@ -4,7 +4,7 @@ Title: Export gtsummary Tables with reporter
 Version: 0.1.0.9212
 Date: 2026-04-07
 Authors@R: c(
-    person("Xiecheng", "Gu", email = "xiecheng.gu@boehringer-ingelheim.com", role = c("aut", "cre")),
+    person("Xiecheng", "Gu", email = "guxc0405med@163.com", role = c("aut", "cre")),
     person("Joe", "Zhu", email = "sha.joe.zhu@gmail.com", role = c("aut")),
     person("Bill", "Huang", email = "Bill.Huang@Toastmasters.org.tw", role = c("aut")))
 Maintainer: Xiecheng Gu <xiecheng.gu@boehringer-ingelheim.com>
