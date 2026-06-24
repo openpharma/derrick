@@ -203,6 +203,140 @@ normalize_column_labels <- function(x) {
   NULL
 }
 
+#' Normalize output header text
+#'
+#' Applies display-only conventions that should be consistent across table
+#' builders: exact Overall column headers are shown as Total, and `N (%)` keeps
+#' a space before the parenthesis when it appears in a header.
+#'
+#' @noRd
+normalize_report_header_label <- function(x) {
+  if (is.null(x)) return(x)
+
+  x_chr <- strip_md_bold(as.character(x))
+  x_chr <- gsub("\\b[Nn]\\s*\\(\\s*%\\s*\\)", "N (%)", x_chr, perl = TRUE)
+  x_chr <- gsub("\\b[Nn]\\s*\\(\\s*%\\s+of\\b", "N (% of", x_chr, perl = TRUE)
+  x_chr <- gsub("^\\s*Overall\\s*$", "Total", x_chr, ignore.case = TRUE)
+  x_chr <- gsub("^\\s*Overall\\s*(\\n|\\()", "Total\\1", x_chr,
+                ignore.case = TRUE, perl = TRUE)
+  x_chr
+}
+
+#' Detect count-percent values in a table column
+#'
+#' This identifies clinical count/percent display cells such as `12 (34.5)`
+#' or `12 (34.5%)`. The first value must be an integer count so continuous
+#' values such as `12.3 (4.5)` are not treated as `N (%)`.
+#'
+#' @noRd
+column_has_n_percent_values <- function(x) {
+  if (is.null(x)) return(FALSE)
+
+  x_chr <- trimws(as.character(x))
+  x_chr <- x_chr[!is.na(x_chr) & nzchar(x_chr)]
+  if (length(x_chr) == 0L) return(FALSE)
+
+  any(grepl(
+    "^\\d[\\d,]*\\s*\\(\\s*\\d+(?:\\.\\d+)?\\s*%?\\s*\\)$",
+    x_chr,
+    perl = TRUE
+  ))
+}
+
+#' Detect continuous-summary statistic headers
+#'
+#' Count-percent cells and continuous `Mean (SD)` cells can have the same
+#' display shape, for example `24 (9)`. These labels identify statistic
+#' columns where `N (%)` should not be added automatically.
+#'
+#' @noRd
+header_is_continuous_statistic <- function(label) {
+  if (is.null(label)) return(FALSE)
+
+  label_clean <- normalize_report_header_label(label)
+  label_clean <- tolower(trimws(gsub("\\s+", " ", as.character(label_clean))))
+  if (length(label_clean) == 0L || !nzchar(label_clean[1L])) return(FALSE)
+
+  label_clean[1L] %in% c(
+    "mean",
+    "sd",
+    "mean (sd)",
+    "median",
+    "min",
+    "max",
+    "min, max",
+    "value",
+    "change",
+    "change from baseline",
+    "baseline"
+  )
+}
+
+#' Detect continuous-summary statistic rows
+#'
+#' Continuous2 summaries can place the treatment name in the column header and
+#' the statistic names in body rows. In that shape, cells like `24 (9)` are
+#' `Mean (SD)`, not count-percent values.
+#'
+#' @noRd
+table_has_continuous_statistic_rows <- function(data) {
+  if (is.null(data) || !is.data.frame(data) || !"label" %in% names(data)) {
+    return(FALSE)
+  }
+
+  labels <- normalize_report_header_label(data$label)
+  labels <- gsub(intToUtf8(160), " ", as.character(labels), fixed = TRUE)
+  labels <- tolower(trimws(gsub("\\s+", " ", labels)))
+  labels <- labels[!is.na(labels) & nzchar(labels)]
+  if (length(labels) == 0L) return(FALSE)
+
+  any(labels %in% c("mean", "sd", "mean (sd)", "median", "min", "max", "min, max"))
+}
+
+#' Add `N (%)` to headers for count-percent statistic columns
+#'
+#' If a visible `stat_*` column contains count-percent values, append `N (%)`
+#' on the second header line. Existing `N (%)` text is not duplicated.
+#'
+#' @noRd
+add_n_percent_to_stat_headers <- function(header_df, data) {
+  if (is.null(header_df) || !is.data.frame(header_df) || is.null(data)) {
+    return(header_df)
+  }
+  if (!all(c("column", "label") %in% names(header_df))) {
+    return(header_df)
+  }
+
+  stat_cols <- intersect(grep("^stat_", names(data), value = TRUE), header_df$column)
+  if (length(stat_cols) == 0L) return(header_df)
+
+  for (stat_col in stat_cols) {
+    row_id <- which(header_df$column == stat_col)
+    if (length(row_id) == 0L) next
+
+    label <- normalize_report_header_label(header_df$label[row_id[1L]])
+    has_n_percent <- grepl("N\\s*\\n?\\s*\\(\\s*%\\s*(?:\\)|of\\b)",
+                           label,
+                           ignore.case = TRUE,
+                           perl = TRUE)
+    if (has_n_percent || header_is_continuous_statistic(label)) {
+      header_df$label[row_id] <- label
+      next
+    }
+
+    if (table_has_continuous_statistic_rows(data)) {
+      header_df$label[row_id] <- label
+      next
+    }
+
+    if (!column_has_n_percent_values(data[[stat_col]])) next
+
+    header_df$label[row_id] <- paste0(label, "\nN (%)")
+  }
+
+  header_df
+}
+
 
 # ---------------------------------------------------------------------------
 # Page geometry helpers
@@ -555,7 +689,7 @@ apply_spanning_rows <- function(df, span_use, ordered_cols, spanning_header_fn) 
   for (i in seq_len(nrow(span_use))) {
     from_idx  <- resolve_span_index(span_use$from[i],  ordered_cols)
     to_idx    <- resolve_span_index(span_use$to[i],    ordered_cols)
-    label_val <- strip_md_bold(span_use$label[i])
+    label_val <- normalize_report_header_label(span_use$label[i])
     if (is.null(from_idx) || is.null(to_idx) || is.null(label_val)) next
     if (from_idx > to_idx) { tmp <- from_idx; from_idx <- to_idx; to_idx <- tmp }
     mid_idx           <- floor((from_idx + to_idx) / 2)
@@ -601,7 +735,7 @@ apply_spanning_headers <- function(tbl_obj, span_use, ordered_cols,
     to_col    <- resolve_span_col(span_use$to[i],   ordered_cols)
     from_idx  <- resolve_span_index(span_use$from[i], ordered_cols)
     to_idx    <- resolve_span_index(span_use$to[i],   ordered_cols)
-    label_val <- strip_md_bold(span_use$label[i])
+    label_val <- normalize_report_header_label(span_use$label[i])
 
     if (isTRUE(debug_spanning)) {
       message(sprintf(
@@ -659,6 +793,9 @@ apply_spanning_headers <- function(tbl_obj, span_use, ordered_cols,
 #' @param center_cols      Columns to centre-align (subset of `cols_to_define`).
 #' @param label_overrides  Named list of column-label overrides or `NULL`.
 #' @param group_cols_to_hide  Columns to hide with `blank_after`.
+#' @param page_by_cols_to_hide  Columns to hide and use as reporter page-by
+#'   subtitles.
+#' @param page_by_label  Prefix label for the page-by subtitle.
 #' @param span_use         Normalised spanning-header spec or `NULL`.
 #' @param ordered_cols     Column names in display order.
 #' @param spanning_header_fn  `reporter::spanning_header` or `NULL`.
@@ -667,11 +804,17 @@ apply_spanning_headers <- function(tbl_obj, span_use, ordered_cols,
 build_table_spec <- function(df, col_widths = NULL, table_width = NULL,
                               col_map, cols_to_define, center_cols,
                               label_overrides, group_cols_to_hide,
+                              page_by_cols_to_hide = character(0),
+                              page_by_label = "",
                               span_use, ordered_cols, spanning_header_fn,
                               debug_spanning = FALSE) {
   df <- apply_spanning_rows(df, span_use, ordered_cols, spanning_header_fn)
 
   label_header <- ""
+  label_col_map <- col_map[col_map$column == "label", "label", drop = TRUE]
+  if (length(label_col_map) > 0L && !is.na(label_col_map[[1L]]) && nzchar(label_col_map[[1L]])) {
+    label_header <- label_col_map[[1L]]
+  }
   if (!is.null(label_overrides) && "label" %in% names(label_overrides)) {
     label_header <- label_overrides[["label"]]
   }
@@ -707,6 +850,30 @@ build_table_spec <- function(df, col_widths = NULL, table_width = NULL,
         reporter::define,
         list(x = tbl, var = as.name(gcol), visible = FALSE, blank_after = TRUE)
       )
+    }
+  }
+
+  if (length(page_by_cols_to_hide) > 0) {
+    for (pbcol in page_by_cols_to_hide) {
+      if (!pbcol %in% names(df)) next
+      tbl <- do.call(
+        reporter::define,
+        list(x = tbl, var = as.name(pbcol), visible = FALSE)
+      )
+    }
+
+    page_by_col <- page_by_cols_to_hide[[1L]]
+    if (page_by_col %in% names(df)) {
+      page_by_args <- list(
+        x = tbl,
+        var = as.name(page_by_col),
+        label = page_by_label,
+        align = "left",
+        blank_row = "below"
+      )
+      page_by_formals <- tryCatch(names(formals(reporter::page_by)), error = function(e) character(0))
+      if ("bold" %in% page_by_formals) page_by_args$bold <- TRUE
+      tbl <- do.call(reporter::page_by, page_by_args)
     }
   }
 

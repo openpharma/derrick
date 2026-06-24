@@ -17,6 +17,7 @@ doc
 docs
 inst/outputs/*
 tests/testthat/outputs/*
+ctr-in-r-templates/
 logs
 Meta
 packrat/lib*/

@@ -38,7 +38,9 @@
 # - report_font_size: base font size for table
 # - indent_unit: spaces per indent unit for label column
 # - output_types: output selection; any of RTF, TXT, DOCX, PDF, HTML
-# - save_rds: save processed data and ARD objects as RDS
+# - save_rds: save processed output data as RDS
+# - save_ard: optionally save ARD from a gtsummary object. Default is FALSE so
+#   CTR templates can save ARD before reporter output in the template function.
 # - rds_dir: reserved argument for backward compatibility
 # - rows_per_page: optional manual rows per pre-split chunk (reporter handles
 #   pagination when NULL)
@@ -46,6 +48,9 @@
 # - debug_spanning: print spanning header debug details
 # - group_columns: optional grouping columns to hide and blank_after
 # - group_blank_after: if TRUE, apply reporter blank_after by group column
+# - page_by_columns: optional columns to hide and use as reporter page-by
+#   subtitles
+# - page_by_label: optional prefix label for the page-by subtitle
 #
 # Environment variables (auto-used if defined):
 # - title1-9: report title lines
@@ -154,8 +159,11 @@
 #' @param indent_unit Number of spaces per indent level in `label`.
 #' @param output_types Output types to write; supported values are `"RTF"`,
 #'   `"TXT"`, `"DOCX"`, `"PDF"`, and `"HTML"`.
-#' @param save_rds Logical; when `TRUE`, save processed output data and ARD
-#'   object (if available) as `.rds` files.
+#' @param save_rds Logical; when `TRUE`, save processed output data as an
+#'   `.rds` file.
+#' @param save_ard Logical; when `TRUE`, also save ARD from a `gtsummary`
+#'   object. Default is `FALSE` because CTR templates usually save ARD before
+#'   calling `gtsummary_reporter()`.
 #' @param rds_dir Reserved argument for backward compatibility.
 #' @param rows_per_page Optional maximum number of table rows per manual chunk.
 #'   If `NULL`, no manual pre-splitting is done; reporter handles pagination in
@@ -166,6 +174,11 @@
 #'   `blank_after`.
 #' @param group_blank_after Logical; whether to apply `blank_after` based on
 #'   grouping columns.
+#' @param page_by_columns Optional columns to hide and pass to
+#'   `reporter::page_by()` as per-category subtitles. Only the first column is
+#'   used because reporter supports one page-by variable per table.
+#' @param page_by_label Prefix label for `page_by_columns`; use `""` to display
+#'   only the group value.
 #'
 #' @return A character vector containing generated output file paths.
 #'
@@ -198,13 +211,48 @@ gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
                                            indent_unit = 1,
                                            output_types = c("RTF", "TXT"),
                                            save_rds = TRUE,
+                                           save_ard = FALSE,
                                            rds_dir = "rds",
                                            rows_per_page = NULL,
                                            max_chars_per_line = NULL,
                                            debug_indent = FALSE,
                                            debug_spanning = FALSE,
                                            group_columns = NULL,
-                                           group_blank_after = TRUE) {
+                                           group_blank_after = TRUE,
+                                           page_by_columns = NULL,
+                                           page_by_label = "") {
+
+  object_reporter_args <- attr(gts_obj, "reporter_args", exact = TRUE)
+  if (is.list(object_reporter_args)) {
+    use_object_arg <- function(current, default, name) {
+      object_value <- object_reporter_args[[name]]
+      if (is.null(object_value)) {
+        return(current)
+      }
+      if (is.null(current) || identical(current, default)) {
+        return(object_value)
+      }
+      current
+    }
+
+    max_table_width <- use_object_arg(max_table_width, NULL, "max_table_width")
+    min_col_width <- use_object_arg(min_col_width, 0.6, "min_col_width")
+    column_widths <- use_object_arg(column_widths, NULL, "column_widths")
+    column_labels <- use_object_arg(column_labels, NULL, "column_labels")
+    spanning_headers <- use_object_arg(spanning_headers, NULL, "spanning_headers")
+    report_orientation <- use_object_arg(report_orientation, "landscape", "report_orientation")
+    report_paper_size <- use_object_arg(report_paper_size, "letter", "report_paper_size")
+    report_units <- use_object_arg(report_units, "inches", "report_units")
+    report_margins <- use_object_arg(report_margins, NULL, "report_margins")
+    report_font_size <- use_object_arg(report_font_size, 9, "report_font_size")
+    indent_unit <- use_object_arg(indent_unit, 1, "indent_unit")
+    rows_per_page <- use_object_arg(rows_per_page, NULL, "rows_per_page")
+    max_chars_per_line <- use_object_arg(max_chars_per_line, NULL, "max_chars_per_line")
+    group_columns <- use_object_arg(group_columns, NULL, "group_columns")
+    group_blank_after <- use_object_arg(group_blank_after, TRUE, "group_blank_after")
+    page_by_columns <- use_object_arg(page_by_columns, NULL, "page_by_columns")
+    page_by_label <- use_object_arg(page_by_label, "", "page_by_label")
+  }
 
   # A. Extract data and styling metadata ----------------------------------------
   has_table_body <- is.data.frame(gts_obj) && "table_body" %in% names(gts_obj)
@@ -260,7 +308,7 @@ gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
     header_df <- styling$header %>%
       dplyr::mutate(
         column = as.character(column),
-        label  = strip_md_bold(as.character(label)),
+        label  = normalize_report_header_label(label),
         hide   = as.logical(hide)
       )
   } else {
@@ -268,7 +316,7 @@ gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
     col_labels[col_labels == ""] <- names(raw_body)[col_labels == ""]
     header_df <- tibble::tibble(
       column = names(raw_body),
-      label  = strip_md_bold(unname(col_labels)),
+      label  = normalize_report_header_label(unname(col_labels)),
       hide   = FALSE
     )
   }
@@ -303,6 +351,12 @@ gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
     group_cols_to_hide <- intersect(as.character(group_columns), names(processed_df))
   } else {
     group_cols_to_hide <- grep("^group\\d+_level$", names(processed_df), value = TRUE)
+  }
+
+  page_by_cols_to_hide <- if (!is.null(page_by_columns)) {
+    intersect(as.character(page_by_columns), names(processed_df))
+  } else {
+    character(0)
   }
 
   # D1. Optional indent diagnostics ---------------------------------------------
@@ -388,6 +442,8 @@ gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
                     -dplyr::any_of(c(".keep_p", ".has_p")))
   }
 
+  header_df <- add_n_percent_to_stat_headers(header_df, processed_df)
+
   # Ensure RDS directory exists early
   if (isTRUE(save_rds)) {
     rds_full_dir <- dirname(file_path)
@@ -408,13 +464,14 @@ gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
   # Resolve column-label overrides before table construction.
   label_overrides <- normalize_column_labels(column_labels)
   if (!is.null(label_overrides)) {
-    label_overrides <- lapply(label_overrides, strip_md_bold)
+    label_overrides <- lapply(label_overrides, normalize_report_header_label)
   }
 
   # Manual widths are applied in display-column order. When column_widths is
   # NULL, do not pass column widths at all; reporter computes them using the
   # target output format, font, header labels, and table contents.
-  width_cols <- setdiff(names(processed_df), group_cols_to_hide)
+  hidden_cols <- unique(c(group_cols_to_hide, page_by_cols_to_hide))
+  width_cols <- setdiff(names(processed_df), hidden_cols)
   if (!"label" %in% width_cols && "label" %in% names(processed_df)) {
     width_cols <- c("label", width_cols)
   }
@@ -465,9 +522,16 @@ gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
 
   # E1. Column map and spanning header setup ------------------------------------
   col_map        <- header_df %>% dplyr::filter(!hide)
-  cols_to_define <- setdiff(names(processed_df), c("label", group_cols_to_hide))
+  cols_to_define <- setdiff(names(processed_df), c("label", hidden_cols))
   ordered_cols   <- names(processed_df)
   center_cols    <- setdiff(cols_to_define, "label")
+  if ("align" %in% names(col_map) &&
+      any(nzchar(trimws(as.character(col_map$align[!is.na(col_map$align)]))))) {
+    center_cols <- intersect(
+      cols_to_define,
+      col_map$column[tolower(as.character(col_map$align)) == "center"]
+    )
+  }
 
   span_use <- if (!is.null(spanning_headers)) {
     normalize_spanning_headers(spanning_headers)
@@ -492,6 +556,8 @@ gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
     center_cols        = center_cols,
     label_overrides    = label_overrides,
     group_cols_to_hide = group_cols_to_hide,
+    page_by_cols_to_hide = page_by_cols_to_hide,
+    page_by_label      = page_by_label,
     span_use           = span_use,
     ordered_cols       = ordered_cols,
     spanning_header_fn = spanning_header_fn,
@@ -522,6 +588,61 @@ gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
     }
 
     rpt
+  }
+
+  split_output_rows <- function(df, max_rows, group_cols, page_by_cols) {
+    if (nrow(df) == 0L) {
+      return(list(integer(0)))
+    }
+    if (is.null(max_rows) || !is.finite(max_rows) || max_rows <= 0) {
+      return(list(seq_len(nrow(df))))
+    }
+
+    page_col <- intersect(page_by_cols, names(df))
+    page_col <- if (length(page_col) > 0L) page_col[[1L]] else NULL
+
+    group_col <- intersect(group_cols, names(df))
+    group_col <- if (length(group_col) > 0L) group_col[[length(group_col)]] else NULL
+
+    all_rows <- seq_len(nrow(df))
+    if (!is.null(page_col)) {
+      page_vals <- as.character(df[[page_col]])
+      page_vals[is.na(page_vals)] <- paste0("..missing_page_", all_rows[is.na(page_vals)])
+      page_block_id <- cumsum(c(TRUE, page_vals[-1L] != page_vals[-length(page_vals)]))
+      page_blocks <- split(all_rows, page_block_id)
+    } else {
+      page_blocks <- list(all_rows)
+    }
+
+    chunks <- list()
+    for (page_rows in page_blocks) {
+      if (!is.null(group_col)) {
+        group_vals <- as.character(df[[group_col]][page_rows])
+        group_vals[is.na(group_vals)] <- paste0("..missing_group_", page_rows[is.na(group_vals)])
+        group_block_id <- cumsum(c(TRUE, group_vals[-1L] != group_vals[-length(group_vals)]))
+        row_groups <- split(page_rows, group_block_id)
+      } else {
+        row_groups <- as.list(page_rows)
+      }
+
+      current_rows <- integer(0)
+      current_n <- 0L
+      for (row_group in row_groups) {
+        group_n <- length(row_group) + if (!is.null(group_col)) 1L else 0L
+        if (length(current_rows) > 0L && current_n + group_n > max_rows) {
+          chunks[[length(chunks) + 1L]] <- current_rows
+          current_rows <- integer(0)
+          current_n <- 0L
+        }
+        current_rows <- c(current_rows, row_group)
+        current_n <- current_n + group_n
+      }
+      if (length(current_rows) > 0L) {
+        chunks[[length(chunks) + 1L]] <- current_rows
+      }
+    }
+
+    chunks
   }
 
   build_report_for_output <- function(output_type) {
@@ -589,8 +710,12 @@ gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
     # reporter computes page breaks during write_report() from output-specific
     # fixed metrics and actual wrapped line counts. Pre-split only on request.
     if (!is.null(rows_per_page) && is.finite(rows_per_page) && rows_per_page > 0) {
-      row_ids   <- seq_len(nrow(output_df))
-      chunk_ids <- split(row_ids, ceiling(row_ids / rows_per_page))
+      chunk_ids <- split_output_rows(
+        output_df,
+        rows_per_page,
+        group_cols_to_hide,
+        page_by_cols_to_hide
+      )
 
       for (i in seq_along(chunk_ids)) {
         chunk_df  <- output_df[chunk_ids[[i]], , drop = FALSE]
@@ -655,16 +780,21 @@ gtsummary_reporter <- function(gts_obj, file_path = "Clinical_Report.rtf",
     if (!is.null(rds_full_dir)) {
       saveRDS(processed_df, file.path(rds_full_dir, paste0(base_name, "_output_data.rds")))
 
-      if (!is_plain_df) {
-        ard_obj <- NULL
-        if (requireNamespace("gtsummary", quietly = TRUE) &&
-            exists("gather_ard", where = asNamespace("gtsummary"), inherits = FALSE)) {
-          gather_ard <- utils::getFromNamespace("gather_ard", "gtsummary")
-          ard_obj <- tryCatch(gather_ard(gts_obj), error = function(e) NULL)
-        } else if (requireNamespace("cards", quietly = TRUE) &&
-                   exists("as_ard", where = asNamespace("cards"), inherits = FALSE)) {
-          as_ard <- utils::getFromNamespace("as_ard", "cards")
-          ard_obj <- tryCatch(as_ard(gts_obj), error = function(e) NULL)
+      if (isTRUE(save_ard)) {
+        ard_obj <- attr(gts_obj, "ard_obj", exact = TRUE)
+        if (is.null(ard_obj)) {
+          ard_obj <- attr(gts_obj, "ard", exact = TRUE)
+        }
+        if (is.null(ard_obj) && !is_plain_df) {
+          if (requireNamespace("gtsummary", quietly = TRUE) &&
+              exists("gather_ard", where = asNamespace("gtsummary"), inherits = FALSE)) {
+            gather_ard <- utils::getFromNamespace("gather_ard", "gtsummary")
+            ard_obj <- tryCatch(gather_ard(gts_obj), error = function(e) NULL)
+          } else if (requireNamespace("cards", quietly = TRUE) &&
+                     exists("as_ard", where = asNamespace("cards"), inherits = FALSE)) {
+            as_ard <- utils::getFromNamespace("as_ard", "cards")
+            ard_obj <- tryCatch(as_ard(gts_obj), error = function(e) NULL)
+          }
         }
         if (!is.null(ard_obj)) {
           saveRDS(ard_obj, file.path(rds_full_dir, paste0(base_name, "_ard.rds")))

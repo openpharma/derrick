@@ -112,9 +112,17 @@ test_that("gtsummary_reporter writes TXT output from a gtsummary summary", {
   expect_true(all(c("label", "stat_1", "stat_2", "p.value") %in% names(output_data)))
   expect_true(any(grepl("Age", output_data$label, fixed = TRUE)))
   expect_true(any(grepl("Grade", output_data$label, fixed = TRUE)))
+  expect_false(file.exists(file.path(output_dir, "t-demog_ard.rds")))
 
   if (ard_extractor_available()) {
-    expect_true(file.exists(file.path(output_dir, "t-demog_ard.rds")))
+    derrick::gtsummary_reporter(
+      gts_obj = demog_tbl,
+      file_path = file.path(output_dir, "t-demog-with-ard.rtf"),
+      output_types = "TXT",
+      save_rds = TRUE,
+      save_ard = TRUE
+    )
+    expect_true(file.exists(file.path(output_dir, "t-demog-with-ard_ard.rds")))
   }
 })
 
@@ -161,6 +169,74 @@ test_that("gtsummary_reporter writes multiple outputs from a plain data frame", 
   expect_match(html_output, "Alanine aminotransferase increased")
 })
 
+test_that("gtsummary_reporter writes page-by subtitles from hidden category columns", {
+  skip_if_not_installed("reporter")
+
+  output_dir <- make_reporter_test_dir("pageby")
+  on.exit(unlink(output_dir, recursive = TRUE, force = TRUE), add = TRUE)
+
+  page_by_data <- data.frame(
+    category = c("Chemistry", "Chemistry", "Hematology", "Hematology"),
+    label = c("Alanine aminotransferase", "Albumin", "Hemoglobin", "Platelets"),
+    stat_1 = c("12", "8", "4", "2"),
+    stringsAsFactors = FALSE
+  )
+
+  txt_paths <- derrick::gtsummary_reporter(
+    gts_obj = page_by_data,
+    file_path = file.path(output_dir, "t-lab-pageby.rtf"),
+    column_labels = c(label = "Parameter", stat_1 = "N"),
+    output_types = "TXT",
+    save_rds = FALSE,
+    page_by_columns = "category",
+    page_by_label = "Category: "
+  )
+
+  expect_length(txt_paths, 1L)
+  expect_true(file.exists(txt_paths))
+
+  txt_output <- collapse_report_text(txt_paths)
+  expect_match(txt_output, "Category:\\s*Chemistry")
+  expect_match(txt_output, "Category:\\s*Hematology")
+  expect_match(txt_output, "Parameter\\s+N")
+  expect_no_match(txt_output, "category\\s+Parameter\\s+N", ignore.case = TRUE)
+})
+
+test_that("gtsummary_reporter reads page-by subtitles from object reporter args", {
+  skip_if_not_installed("reporter")
+
+  output_dir <- make_reporter_test_dir("pageby-attr")
+  on.exit(unlink(output_dir, recursive = TRUE, force = TRUE), add = TRUE)
+
+  page_by_data <- data.frame(
+    category = c("Chemistry", "Chemistry", "Hematology", "Hematology"),
+    label = c("Alanine aminotransferase", "Albumin", "Hemoglobin", "Platelets"),
+    stat_1 = c("12", "8", "4", "2"),
+    stringsAsFactors = FALSE
+  )
+  attr(page_by_data, "reporter_args") <- list(
+    column_labels = c(label = "Parameter", stat_1 = "N"),
+    page_by_columns = "category",
+    page_by_label = "Category: "
+  )
+
+  txt_paths <- derrick::gtsummary_reporter(
+    gts_obj = page_by_data,
+    file_path = file.path(output_dir, "t-lab-pageby-attr.rtf"),
+    output_types = "TXT",
+    save_rds = FALSE
+  )
+
+  expect_length(txt_paths, 1L)
+  expect_true(file.exists(txt_paths))
+
+  txt_output <- collapse_report_text(txt_paths)
+  expect_match(txt_output, "Category:\\s*Chemistry")
+  expect_match(txt_output, "Category:\\s*Hematology")
+  expect_match(txt_output, "Parameter\\s+N")
+  expect_no_match(txt_output, "category\\s+Parameter\\s+N", ignore.case = TRUE)
+})
+
 test_that("Output Test-01: Output a RTF file with gtsummary object as expected", {
   if (dev) {
     skip_if_not_installed("gtsummary")
@@ -186,7 +262,8 @@ test_that("Output Test-01: Output a RTF file with gtsummary object as expected",
       gts_obj = demog_tbl,
       file_path = rtf_path,
       output_types = "RTF",
-      save_rds = TRUE
+      save_rds = TRUE,
+      save_ard = TRUE
     )
 
     expect_equal(demog_paths, rtf_path)

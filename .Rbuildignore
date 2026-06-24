@@ -11,6 +11,7 @@ SECURITY.md
 ^.*\.Rcheck$
 ^.*\.tar\.gz$
 ^tests/testthat/outputs$
+^ctr-in-r-templates$
 README.*
 ^\.lintr$
 ^staged_dependencies\.yaml$

@@ -12,6 +12,47 @@ test_that("strip_md_bold removes ** markers", {
   expect_equal(derrick:::strip_md_bold("**a** and **b**"), "a and b")
 })
 
+test_that("normalize_report_header_label applies clinical header conventions", {
+  expect_equal(derrick:::normalize_report_header_label("Overall"), "Total")
+  expect_equal(derrick:::normalize_report_header_label("Overall\nN (%)"), "Total\nN (%)")
+  expect_equal(derrick:::normalize_report_header_label("Active N(%)"), "Active N (%)")
+  expect_equal(derrick:::normalize_report_header_label("N(% of treated)"), "N (% of treated)")
+  expect_equal(derrick:::normalize_report_header_label("**N (%)**"), "N (%)")
+})
+
+test_that("column_has_n_percent_values detects count-percent cells", {
+  expect_true(derrick:::column_has_n_percent_values(c("", "12 (34.5)", NA)))
+  expect_true(derrick:::column_has_n_percent_values("12 (34.5%)"))
+  expect_false(derrick:::column_has_n_percent_values("12.3 (4.5)"))
+  expect_false(derrick:::column_has_n_percent_values(c("", NA)))
+})
+
+test_that("add_n_percent_to_stat_headers appends second-line N percent labels", {
+  header_df <- tibble::tibble(
+    column = c("label", "stat_1", "stat_2", "stat_3", "stat_4", "stat_5", "stat_6"),
+    label = c("", "Placebo", "Study Drug\nN (%)", "Mean", "Mean (SD)", "Value", "Flag\nN(% of treated)"),
+    hide = FALSE
+  )
+  data <- tibble::tibble(
+    label = c("A", "B"),
+    stat_1 = c("12 (34.5)", ""),
+    stat_2 = c("13 (40%)", ""),
+    stat_3 = c("12.3", "4.5"),
+    stat_4 = c("24 (9)", "22 (9)"),
+    stat_5 = c("24 (9)", "22 (9)"),
+    stat_6 = c("13 (40%)", "")
+  )
+
+  res <- derrick:::add_n_percent_to_stat_headers(header_df, data)
+
+  expect_equal(res$label[res$column == "stat_1"], "Placebo\nN (%)")
+  expect_equal(res$label[res$column == "stat_2"], "Study Drug\nN (%)")
+  expect_equal(res$label[res$column == "stat_3"], "Mean")
+  expect_equal(res$label[res$column == "stat_4"], "Mean (SD)")
+  expect_equal(res$label[res$column == "stat_5"], "Value")
+  expect_equal(res$label[res$column == "stat_6"], "Flag\nN (% of treated)")
+})
+
 test_that("collect_env_lines picks up numbered variables", {
   e <- new.env(parent = emptyenv())
   e$title1 <- "First"
@@ -548,6 +589,32 @@ test_that("build_table_spec creates bold column headers by default", {
   expect_true(out$header_bold)
 })
 
+test_that("build_table_spec uses gtsummary label header without override", {
+  skip_if_not_installed("reporter")
+
+  df <- data.frame(label = "Row", stat_1 = "1")
+  col_map <- data.frame(
+    column = c("label", "stat_1"),
+    label = c("System Organ Class /\n   Preferred term", "Drug A"),
+    stringsAsFactors = FALSE
+  )
+
+  out <- derrick:::build_table_spec(
+    df = df,
+    col_widths = c(label = 2, stat_1 = 1),
+    col_map = col_map,
+    cols_to_define = "stat_1",
+    center_cols = "stat_1",
+    label_overrides = NULL,
+    group_cols_to_hide = character(0),
+    span_use = NULL,
+    ordered_cols = names(df),
+    spanning_header_fn = reporter::spanning_header
+  )
+
+  expect_equal(out[["col_defs"]][["label"]][["label"]], "System Organ Class /\n   Preferred term")
+})
+
 test_that("build_table_spec leaves automatic widths to reporter", {
   skip_if_not_installed("reporter")
 
@@ -604,6 +671,43 @@ test_that("build_table_spec forwards manual widths to reporter", {
   expect_equal(out[["width"]], 3)
   expect_equal(out[["col_defs"]][["label"]][["width"]], 2)
   expect_equal(out[["col_defs"]][["stat_1"]][["width"]], 1)
+})
+
+test_that("build_table_spec applies reporter page_by and hides page-by columns", {
+  skip_if_not_installed("reporter")
+
+  df <- data.frame(
+    section = c("Chemistry", "Chemistry", "Hematology"),
+    label = c("ALT", "Albumin", "Hemoglobin"),
+    stat_1 = c("1", "2", "3"),
+    stringsAsFactors = FALSE
+  )
+  col_map <- data.frame(
+    column = "stat_1",
+    label = "Drug A",
+    stringsAsFactors = FALSE
+  )
+
+  out <- derrick:::build_table_spec(
+    df = df,
+    col_widths = NULL,
+    table_width = NULL,
+    col_map = col_map,
+    cols_to_define = "stat_1",
+    center_cols = "stat_1",
+    label_overrides = list(label = "Parameter"),
+    group_cols_to_hide = character(0),
+    page_by_cols_to_hide = "section",
+    page_by_label = "Category: ",
+    span_use = NULL,
+    ordered_cols = names(df),
+    spanning_header_fn = reporter::spanning_header
+  )
+
+  expect_equal(out[["page_by"]][["var"]], "section")
+  expect_equal(out[["page_by"]][["label"]], "Category: ")
+  expect_true(out[["page_by"]][["bold"]])
+  expect_false(out[["col_defs"]][["section"]][["visible"]])
 })
 
 # ---------------------------------------------------------------------------

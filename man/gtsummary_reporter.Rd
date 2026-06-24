@@ -20,13 +20,16 @@ gtsummary_reporter(
   indent_unit = 1,
   output_types = c("RTF", "TXT"),
   save_rds = TRUE,
+  save_ard = FALSE,
   rds_dir = "rds",
   rows_per_page = NULL,
   max_chars_per_line = NULL,
   debug_indent = FALSE,
   debug_spanning = FALSE,
   group_columns = NULL,
-  group_blank_after = TRUE
+  group_blank_after = TRUE,
+  page_by_columns = NULL,
+  page_by_label = ""
 )
 }
 \arguments{
@@ -94,8 +97,12 @@ or list with fields \code{from}, \code{to}, and \code{label}.}
 \item{output_types}{Output types to write; supported values are \code{"RTF"},
 \code{"TXT"}, \code{"DOCX"}, \code{"PDF"}, and \code{"HTML"}.}
 
-\item{save_rds}{Logical; when \code{TRUE}, save processed output data and ARD
-object (if available) as \code{.rds} files.}
+\item{save_rds}{Logical; when \code{TRUE}, save processed output data as an
+\code{.rds} file.}
+
+\item{save_ard}{Logical; when \code{TRUE}, also save ARD from a \code{gtsummary}
+object. Default is \code{FALSE} because CTR templates usually save ARD before
+calling \code{gtsummary_reporter()}.}
 
 \item{rds_dir}{Reserved argument for backward compatibility.}
 
@@ -118,6 +125,13 @@ argument. Title and footnote wrapping is delegated to reporter.}
 
 \item{group_blank_after}{Logical; whether to apply \code{blank_after} based on
 grouping columns.}
+
+\item{page_by_columns}{Optional columns to hide and pass to
+\code{reporter::page_by()} as per-category subtitles. Only the first column is
+used because reporter supports one page-by variable per table.}
+
+\item{page_by_label}{Prefix label for \code{page_by_columns}; use \code{""} to display
+only the group value.}
 }
 \value{
 A character vector containing generated output file paths.
@@ -157,7 +171,7 @@ actual wrapped title, header, row, and footnote line counts. Set
 own pagination runs.
 }
 \examples{
-\dontshow{if (requireNamespace("reporter", quietly = TRUE) & requireNamespace("gtsummary", quietly = TRUE)) withAutoprint(\{ # examplesIf}
+\dontshow{if (requireNamespace("reporter", quietly = TRUE) & requireNamespace("gtsummary", quietly = TRUE)) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
 gts_tbl <- gtsummary::trial |>
   dplyr::select(trt, age, grade) |>
   gtsummary::tbl_summary(by = trt) |>
