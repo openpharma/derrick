@@ -9,9 +9,9 @@ Authors@R: c(
     person("Bill", "Huang", email = "Bill.Huang@Toastmasters.org.tw", role = c("aut")))
 Maintainer: Xiecheng Gu <guxc0405med@163.com>
 Description: Convert 'gtsummary' tables and plain data frames into clinical-style
-    RTF, TXT, DOCX, PDF, and HTML outputs using 'reporter', with managed widths,
-    pagination, indentation, spanning headers, and optional intermediate data
-    exports.
+    Rich Text Format, plain text, Word, PDF, and HTML outputs using 'reporter',
+    with managed widths, pagination, indentation, spanning headers, and optional
+    intermediate data exports.
 License: Apache License 2.0 | file LICENSE
 URL: https://github.com/openpharma/derrick/
 BugReports: https://github.com/openpharma/derrick/issues
