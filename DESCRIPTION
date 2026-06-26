@@ -1,7 +1,7 @@
 Type: Package
 Package: derrick
 Title: Export gtsummary Tables with reporter
-Version: 0.1.0.9212
+Version: 0.1.1
 Date: 2026-06-26
 Authors@R: c(
     person("Xiecheng", "Gu", email = "guxc0405med@163.com", role = c("aut", "cre")),
