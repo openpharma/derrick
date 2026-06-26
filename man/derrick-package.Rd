@@ -18,7 +18,7 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Xiecheng Gu \email{xiecheng.gu@boehringer-ingelheim.com}
+\strong{Maintainer}: Xiecheng Gu \email{guxc0405med@163.com}
 
 Authors:
 \itemize{

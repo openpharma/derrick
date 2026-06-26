@@ -5,12 +5,16 @@ SECURITY.md
 ^.*\.Rproj$
 ^\.Rproj\.user$
 ^_pkgdown\.yml$
+^pkgdown$
 ^docs$
 ^\.github$
 ^\.git$
 ^\.claude$
+^AGENTS\.md$
 ^.*\.Rcheck$
 ^.*\.tar\.gz$
+^tmp-header-check$
+^win-builder-artifacts$
 ^tests/testthat/outputs$
 ^ctr-in-r-templates$
 README.*

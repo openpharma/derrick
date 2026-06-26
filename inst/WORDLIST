@@ -1,7 +1,9 @@
 BiocCheck
 CMD
+DOCX
 Pkgdown
 Pre
+RTF
 Roxygen
 SuperLinter
 github

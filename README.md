@@ -2,7 +2,7 @@
 
 [![Project Status: Active](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 [![BiocCheck](https://github.com/openpharma/derrick/actions/workflows/bioccheck.yaml/badge.svg)](https://github.com/openpharma/derrick/actions/workflows/bioccheck.yaml)
-[![Current Version](https://img.shields.io/github/r-package/v/openpharma/derrick/main?color=purple&label=package%20version)](https://github.com/openpharma/derrick/tree/main)
+[![Current Version](https://img.shields.io/badge/package%20version-v0.1.1-purple)](https://github.com/openpharma/derrick/tree/main)
 [![Open Issues](https://img.shields.io/github/issues-raw/openpharma/derrick?color=red&label=open%20issues)](https://github.com/openpharma/derrick/issues?q=is%3Aissue+is%3Aopen+sort%3Aupdated-desc)
 
 `derrick` is a focused export layer for clinical tables. Build an analysis

@@ -171,7 +171,7 @@ actual wrapped title, header, row, and footnote line counts. Set
 own pagination runs.
 }
 \examples{
-\dontshow{if (requireNamespace("reporter", quietly = TRUE) & requireNamespace("gtsummary", quietly = TRUE)) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
+\dontshow{if (requireNamespace("reporter", quietly = TRUE) & requireNamespace("gtsummary", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 gts_tbl <- gtsummary::trial |>
   dplyr::select(trt, age, grade) |>
   gtsummary::tbl_summary(by = trt) |>
